@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>실타래</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-canvas:#ffffff;
+    --dot:rgba(0,0,0,0.08);
+    --card-border:#c9bfa8;
+    --ink:#33302a;
+    --ink-soft:#6b6558;
+    --accent:#2e5266;
+    --accent-soft:rgba(46,82,102,0.16);
+    --date-color:#8a6e4b;
+    --danger:#a6453a;
+    --paper-line:#e4dcc8;
+    --ok:#5c8a6a;
+    --warn:#c48a3a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-canvas);font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
+  #viewport{
+    position:fixed; inset:0; overflow:hidden; cursor:grab;
+    background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px);
+    background-size: 26px 26px;
+  }
+  #viewport.panning{cursor:grabbing;}
+  #viewport.connect-mode{cursor:crosshair;}
+  #world{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; will-change:transform; }
+  svg#lines{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
+  svg#lines path.link{ pointer-events:stroke; cursor:pointer; }
+  svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !important; }
+
+  .card{
+    position:absolute; width:260px;
+    background:#ffffff;
+    border:1px solid var(--card-border);
+    border-radius:3px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 6px 16px rgba(0,0,0,0.14);
+    z-index:10;
+    transition: box-shadow .15s ease, border-color .15s ease;
+  }
+  .card:hover{ box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.2); }
+  .card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }
+  .card.dimmed{ opacity:0.28; }
+  .card.connect-mode-active .card-body{ pointer-events:none; }
+  .card.connect-mode-active .card-del{ display:none; }
+  .card.connect-mode-active{ cursor:pointer; }
+
+  .card-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 7px 12px; cursor:grab; user-select:none; border-bottom:1px solid var(--paper-line); }
+  .card-head:active{ cursor:grabbing; }
+  .drag-dots{ color:var(--ink-soft); font-size:13px; letter-spacing:1px; opacity:.6; }
+  .date-input{ font-family:'Fraunces', serif; font-size:13.5px; color:var(--date-color); border:none; background:transparent; outline:none; width:112px; cursor:text; }
+  .card-del{ margin-left:auto; border:none; background:transparent; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
+  .card-del:hover{ color:var(--danger); background:rgba(166,69,58,0.1); }
+  .card-body{ padding:10px 12px 14px; }
+
+  .card-text{ min-height:64px; outline:none; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; color:var(--ink); word-break:break-word; }
+  .card-text:empty:before{ content: attr(data-placeholder); color:#b7ae98; }
+  .card-text.drag-over{ outline:2px dashed var(--accent); outline-offset:2px; border-radius:4px; }
+
+  .embed{ position:relative; margin:8px 0; max-width:100%; }
+  .embed img, .embed video{ max-width:100%; border-radius:4px; display:block; }
+  .embed img{ cursor:zoom-in; }
+  .embed.uploading{ min-height:56px; background:#f3f1ec; border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:12px; }
+  .embed-rm{
+    position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.55); color:#fff;
+    border:none; width:20px; height:20px; border-radius:50%; font-size:12px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  #toolbar{
+    position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
+    display:flex; align-items:center; gap:6px;
+    background:rgba(30,29,27,0.88); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.08);
+    padding:7px 8px; border-radius:999px; z-index:50;
+    box-shadow:0 8px 30px rgba(0,0,0,0.4);
+  }
+  .tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:8px 13px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .tbtn:hover{ background:rgba(255,255,255,0.09); }
+  .tbtn.active{ background:var(--accent); color:#fff; }
+  .tsep{ width:1px; height:18px; background:rgba(255,255,255,0.14); margin:0 2px; }
+  #zoomLabel{ color:#a99; font-size:12px; min-width:38px; text-align:center; }
+
+  #searchWrap{ position:fixed; top:18px; right:20px; z-index:40; }
+  #searchInput{ background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
+  #searchInput::placeholder{ color:#8b8578; }
+
+  #syncStatus{ position:fixed; top:22px; left:20px; z-index:40; display:flex; align-items:center; gap:6px; font-size:11.5px; color:#9a9486; }
+  #syncDot{ width:7px; height:7px; border-radius:50%; background:var(--warn); transition:background .3s ease; }
+  #syncDot.ok{ background:var(--ok); }
+  #syncDot.off{ background:var(--danger); }
+
+  #lightbox{ position:fixed; inset:0; background:rgba(10,10,9,0.92); z-index:200; display:none; align-items:center; justify-content:center; padding:40px; }
+  #lightbox.show{ display:flex; }
+  #lightbox img{ max-width:100%; max-height:100%; border-radius:4px; }
+  #lightbox .lb-close{ position:fixed; top:22px; right:26px; color:#eee; font-size:26px; cursor:pointer; background:rgba(255,255,255,0.08); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+
+  #importInput{ display:none; }
+
+  #toast{ position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#2b2924; color:#ece7db; padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  #toast.show{ opacity:1; }
+
+  .confirm-overlay{ position:fixed; inset:0; background:rgba(20,18,15,0.4); z-index:300; display:flex; align-items:center; justify-content:center; }
+  .confirm-box{ background:#fff; border-radius:10px; padding:20px 22px; width:280px; box-shadow:0 24px 60px rgba(0,0,0,0.3); }
+  .confirm-box p{ margin:0 0 16px; font-size:14px; line-height:1.6; color:var(--ink); }
+  .confirm-actions{ display:flex; justify-content:flex-end; gap:8px; }
+  .confirm-actions button{ border:none; padding:8px 14px; border-radius:6px; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif; }
+  .confirm-cancel{ background:#eee; color:#333; }
+  .confirm-cancel:hover{ background:#e2e2e2; }
+  .confirm-ok{ background:var(--danger); color:#fff; }
+  .confirm-ok:hover{ filter:brightness(1.08); }
+  .confirm-ok.neutral{ background:var(--accent); }
+
+  #setupWarning{ position:fixed; inset:0; z-index:500; background:#fff; display:flex; align-items:center; justify-content:center; padding:30px; }
+  #setupWarning .box{ max-width:520px; border:1px solid #ddd; border-radius:10px; padding:26px 28px; }
+  #setupWarning h1{ font-family:'Fraunces',serif; font-size:21px; margin:0 0 10px; }
+  #setupWarning p{ line-height:1.7; font-size:14px; color:#555; margin:0; }
+  #setupWarning code{ background:#f3f1ec; padding:2px 6px; border-radius:4px; font-size:12.5px; }
+
+  @media (max-width:640px){
+    .card{ width:220px; }
+    #searchInput{ width:120px; }
+    .tbtn{ padding:8px 10px; font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="syncStatus"><span id="syncDot"></span><span id="syncText">연결 중…</span></div>
+<div id="searchWrap"><input id="searchInput" type="text" placeholder="기록 검색…"></div>
+
+<div id="viewport">
+  <svg id="lines"></svg>
+  <div id="world"></div>
+</div>
+
+<div id="toolbar">
+  <button class="tbtn" id="btnAdd">＋ 새 카드</button>
+  <div class="tsep"></div>
+  <button class="tbtn" id="btnConnect">🔗 연결하기</button>
+  <div class="tsep"></div>
+  <button class="tbtn" id="btnZoomOut">－</button>
+  <span id="zoomLabel">100%</span>
+  <button class="tbtn" id="btnZoomIn">＋</button>
+  <button class="tbtn" id="btnReset">화면 정렬</button>
+  <div class="tsep"></div>
+  <button class="tbtn" id="btnExport">⤓ 백업</button>
+  <button class="tbtn" id="btnImport">⤒ 불러오기</button>
+</div>
+
+<div id="lightbox"><div class="lb-close" id="lbClose">×</div><div id="lbContent"></div></div>
+<div id="toast"></div>
+<input type="file" id="importInput" accept="application/json">
+
+<script type="module">
+  /* =========================================================
+     Firebase 설정 — 아래 값을 본인 Firebase 프로젝트의 값으로 교체하세요.
+     (Firebase 콘솔 > 프로젝트 설정 > 내 앱 > SDK 설정 및 구성)
+  ========================================================= */
+  const firebaseConfig = {
+  apiKey: "AIzaSyA3ko19m2hHj1Ox20gQhXFkR2aOcYkziK8",
+  authDomain: "keeping-machine.firebaseapp.com",
+  projectId: "keeping-machine",
+  storageBucket: "keeping-machine.firebasestorage.app",
+  messagingSenderId: "778361559999",
+  appId: "1:778361559999:web:1dae4e1819bdc3132a1f0a"
+  };
+
+  if(firebaseConfig.apiKey === "YOUR_API_KEY"){
+    document.body.innerHTML = `
+      <div id="setupWarning"><div class="box">
+        <h1>Firebase 설정이 필요해요</h1>
+        <p>index.html 안의 <code>firebaseConfig</code> 값을 본인의 Firebase 프로젝트 값으로 바꿔주세요.</p>
+      </div></div>`;
+    throw new Error("Firebase config not set");
+  }
+
+  const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
+  const { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence, serverTimestamp } =
+    await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js");
+  const { getAuth, signInAnonymously, onAuthStateChanged } =
+    await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
+  const { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } =
+    await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js");
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const storage = getStorage(app);
+  try{ await enableIndexedDbPersistence(db); }catch(e){ /* 여러 탭 등: 무시 */ }
+
+  const cardsCol = collection(db, 'cards');
+  const linksCol = collection(db, 'links');
+
+  (function(){
+  "use strict";
+
+  const uid = ()=> 'id_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+  /* ---------- 확인/알림 팝업 ---------- */
+  function showConfirm(message, {okText='삭제', okClass='confirm-ok'}={}){
+    return new Promise(resolve=>{
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      overlay.innerHTML = `<div class="confirm-box"><p></p><div class="confirm-actions">
+        <button class="confirm-cancel">취소</button><button class="${okClass}">${okText}</button></div></div>`;
+      overlay.querySelector('p').textContent = message;
+      document.body.appendChild(overlay);
+      const cleanup = (v)=>{ overlay.remove(); resolve(v); };
+      overlay.querySelector('.confirm-cancel').onclick = ()=> cleanup(false);
+      overlay.querySelector('.'+okClass.split(' ')[0]).onclick = ()=> cleanup(true);
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) cleanup(false); });
+    });
+  }
+  function showAlert(message){
+    return new Promise(resolve=>{
+      const overlay = document.createElement('div');
+      overlay.className = 'confirm-overlay';
+      overlay.innerHTML = `<div class="confirm-box"><p></p><div class="confirm-actions"><button class="confirm-ok neutral">확인</button></div></div>`;
+      overlay.querySelector('p').textContent = message;
+      document.body.appendChild(overlay);
+      overlay.querySelector('button').onclick = ()=>{ overlay.remove(); resolve(); };
+    });
+  }
+
+  /* ---------- 상태 ---------- */
+  let cards = new Map();  // id -> {id,x,y,date,html}
+  let links = new Map();  // id -> {id,from,to}
+  let panX = 0, panY = 0, zoom = 1;
+  let connectMode = false, connectFrom = null, ready = false;
+
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  const svg = document.getElementById('lines');
+  const toast = document.getElementById('toast');
+  const syncDot = document.getElementById('syncDot');
+  const syncText = document.getElementById('syncText');
+
+  function setSyncStatus(state){
+    syncDot.className = state;
+    syncText.textContent = state==='ok' ? '동기화됨' : state==='off' ? '오프라인' : '연결 중…';
+  }
+  window.addEventListener('online', ()=> setSyncStatus('ok'));
+  window.addEventListener('offline', ()=> setSyncStatus('off'));
+
+  function showToast(msg){
+    toast.textContent = msg; toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>toast.classList.remove('show'), 1600);
+  }
+
+  /* 화면 위치/배율은 기기마다 따로 저장 (동기화 X) */
+  function loadLocalView(){
+    try{ const v = JSON.parse(localStorage.getItem('thread-journal-view')); if(v){ panX=v.panX||0; panY=v.panY||0; zoom=v.zoom||1; } }catch(e){}
+  }
+  function saveLocalView(){ try{ localStorage.setItem('thread-journal-view', JSON.stringify({panX,panY,zoom})); }catch(e){} }
+
+  function applyTransform(){
+    world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+'%';
+    requestAnimationFrame(updateLines);
+  }
+
+  function plainText(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||''; }
+
+  /* 카드 HTML 안에 들어 있는 Storage 경로들 */
+  function mediaPathsIn(html){
+    const d = document.createElement('div'); d.innerHTML = html||'';
+    return Array.from(d.querySelectorAll('.embed[data-path]')).map(n=>n.dataset.path);
+  }
+
+  /* ---------- 카드 렌더 ---------- */
+  function renderCard(card){
+    let el = document.getElementById(card.id);
+    if(!el){
+      el = document.createElement('div');
+      el.className = 'card';
+      el.id = card.id;
+      el.innerHTML = `
+        <div class="card-head">
+          <span class="drag-dots">⠿</span>
+          <input class="date-input" type="date">
+          <button class="card-del" title="삭제">×</button>
+        </div>
+        <div class="card-body">
+          <div class="card-text" contenteditable="true" data-placeholder="여기에 적어보세요… 사진·영상은 붙여넣거나 끌어다놓으면 돼요"></div>
+        </div>`;
+      world.appendChild(el);
+      wireCardEvents(el, card.id);
+      if(connectMode) el.classList.add('connect-mode-active');
+    }
+    el.style.left = card.x+'px';
+    el.style.top = card.y+'px';
+    const dateInput = el.querySelector('.date-input');
+    if(document.activeElement !== dateInput) dateInput.value = card.date || '';
+    const textDiv = el.querySelector('.card-text');
+    if(document.activeElement !== textDiv && textDiv.innerHTML !== (card.html||'')){
+      textDiv.innerHTML = card.html || '';
+    }
+  }
+
+  /* ---------- 라이트박스 ---------- */
+  function openLightbox(url){
+    document.getElementById('lbContent').innerHTML = `<img src="${url}">`;
+    document.getElementById('lightbox').classList.add('show');
+  }
+  document.getElementById('lbClose').onclick = ()=> document.getElementById('lightbox').classList.remove('show');
+  document.getElementById('lightbox').addEventListener('click', (e)=>{ if(e.target.id==='lightbox') e.currentTarget.classList.remove('show'); });
+
+  function getRangeFromPoint(x,y){
+    if(document.caretRangeFromPoint) return document.caretRangeFromPoint(x,y);
+    if(document.caretPositionFromPoint){
+      const p = document.caretPositionFromPoint(x,y); if(!p) return null;
+      const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); return r;
+    }
+    return null;
+  }
+
+  function saveCardHtml(cardId, textDiv){
+    const c = cards.get(cardId); if(!c) return;
+    c.html = textDiv.innerHTML;
+    updateDoc(doc(cardsCol, cardId), {html:c.html, updatedAt: serverTimestamp()}).catch(console.error);
+  }
+
+  /* ---------- 사진/영상을 커서 위치에 삽입 ---------- */
+  async function insertMediaAtCaret(cardId, textDiv, file, forcedRange){
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    if(!isVideo && !isImage) return;
+
+    const id = uid();
+    const path = `media/${cardId}/${id}-${file.name || (isVideo?'video':'image')}`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'embed uploading';
+    wrapper.contentEditable = 'false';
+    wrapper.dataset.path = path;
+    wrapper.textContent = '업로드 중…';
+
+    let range = forcedRange;
+    if(!range){
+      const sel = window.getSelection();
+      if(sel && sel.rangeCount>0 && textDiv.contains(sel.anchorNode)) range = sel.getRangeAt(0);
+    }
+    if(range && textDiv.contains(range.startContainer)){
+      range.deleteContents(); range.insertNode(wrapper);
+      const br = document.createElement('br'); wrapper.after(br);
+    } else {
+      textDiv.appendChild(wrapper); textDiv.appendChild(document.createElement('br'));
+    }
+
+    try{
+      const sref = ref(storage, path);
+      await uploadBytes(sref, file);
+      const url = await getDownloadURL(sref);
+      wrapper.className = 'embed';
+      wrapper.innerHTML = (isVideo ? `<video src="${url}" controls preload="metadata"></video>` : `<img src="${url}">`)
+        + `<button class="embed-rm" title="삭제">×</button>`;
+      saveCardHtml(cardId, textDiv);
+    }catch(err){
+      console.error(err);
+      wrapper.remove();
+      showAlert('업로드에 실패했어요. Storage 설정과 규칙을 확인해주세요.');
+    }
+    requestAnimationFrame(updateLines);
+  }
+
+  function wireCardEvents(el, cardId){
+    const dateInput = el.querySelector('.date-input');
+    const textDiv = el.querySelector('.card-text');
+    const delBtn = el.querySelector('.card-del');
+    const head = el.querySelector('.card-head');
+
+    dateInput.addEventListener('change', ()=>{
+      const c = cards.get(cardId); if(!c) return; c.date = dateInput.value;
+      updateDoc(doc(cardsCol, cardId), {date:c.date, updatedAt: serverTimestamp()}).catch(console.error);
+    });
+
+    textDiv.addEventListener('input', ()=>{
+      clearTimeout(textDiv._t);
+      textDiv._t = setTimeout(()=> saveCardHtml(cardId, textDiv), 400);
+      requestAnimationFrame(updateLines);
+    });
+    textDiv.addEventListener('blur', ()=>{ clearTimeout(textDiv._t); saveCardHtml(cardId, textDiv); });
+
+    /* 삽입된 미디어의 × 버튼 / 이미지 확대 (이벤트 위임) */
+    textDiv.addEventListener('click', async (e)=>{
+      const rm = e.target.closest('.embed-rm');
+      if(rm){
+        e.stopPropagation();
+        const embed = rm.closest('.embed');
+        const ok = await showConfirm('이 사진/영상을 삭제할까요?');
+        if(!ok) return;
+        const path = embed.dataset.path;
+        embed.remove();
+        saveCardHtml(cardId, textDiv);
+        if(path) deleteObject(ref(storage, path)).catch(()=>{});
+        return;
+      }
+      const img = e.target.closest('.embed img');
+      if(img) openLightbox(img.src);
+    });
+
+    textDiv.addEventListener('paste', async (e)=>{
+      const items = Array.from(e.clipboardData?.items || []);
+      const fileItem = items.find(it => it.kind==='file' && (it.type.startsWith('image/') || it.type.startsWith('video/')));
+      if(!fileItem) return;
+      e.preventDefault();
+      const file = fileItem.getAsFile();
+      const sel = window.getSelection();
+      const range = (sel && sel.rangeCount>0) ? sel.getRangeAt(0) : null;
+      await insertMediaAtCaret(cardId, textDiv, file, range);
+    });
+
+    textDiv.addEventListener('dragover', (e)=>{ e.preventDefault(); textDiv.classList.add('drag-over'); });
+    textDiv.addEventListener('dragleave', ()=> textDiv.classList.remove('drag-over'));
+    textDiv.addEventListener('drop', async (e)=>{
+      e.preventDefault(); textDiv.classList.remove('drag-over');
+      const file = Array.from(e.dataTransfer.files||[]).find(f=> f.type.startsWith('image/') || f.type.startsWith('video/'));
+      if(!file) return;
+      await insertMediaAtCaret(cardId, textDiv, file, getRangeFromPoint(e.clientX, e.clientY));
+    });
+
+    delBtn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const ok = await showConfirm('이 카드를 삭제할까요? 안에 있는 사진/영상도 함께 삭제돼요.');
+      if(ok) deleteCard(cardId);
+    });
+
+    /* 카드 드래그 이동 */
+    head.addEventListener('mousedown', (e)=>{
+      if(connectMode) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del')) return;
+      e.stopPropagation();
+      const startX = e.clientX, startY = e.clientY;
+      const c = cards.get(cardId); const ox = c.x, oy = c.y;
+      el.style.zIndex = 999;
+      function onMove(ev){
+        c.x = ox + (ev.clientX - startX)/zoom; c.y = oy + (ev.clientY - startY)/zoom;
+        el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines();
+      }
+      function onUp(){
+        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+        updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+      }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+    head.addEventListener('touchstart', (e)=>{
+      if(connectMode) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del')) return;
+      const t = e.touches[0]; const startX = t.clientX, startY = t.clientY;
+      const c = cards.get(cardId); const ox = c.x, oy = c.y;
+      function onMove(ev){
+        const tt = ev.touches[0];
+        c.x = ox + (tt.clientX - startX)/zoom; c.y = oy + (tt.clientY - startY)/zoom;
+        el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines(); ev.preventDefault();
+      }
+      function onEnd(){
+        document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd);
+        updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+      }
+      document.addEventListener('touchmove', onMove, {passive:false}); document.addEventListener('touchend', onEnd);
+    }, {passive:true});
+
+    el.addEventListener('click', (e)=>{
+      if(!connectMode) return;
+      e.stopPropagation();
+      handleConnectClick(cardId);
+    });
+  }
+
+  /* ---------- 연결 ---------- */
+  function handleConnectClick(cardId){
+    if(!connectFrom){
+      connectFrom = cardId;
+      document.getElementById(cardId).classList.add('selected-endpoint');
+      return;
+    }
+    if(connectFrom === cardId){ clearConnectSelection(); return; }
+    let existing = null;
+    for(const l of links.values()){
+      if((l.from===connectFrom && l.to===cardId) || (l.from===cardId && l.to===connectFrom)){ existing = l; break; }
+    }
+    if(existing){
+      deleteDoc(doc(linksCol, existing.id)).catch(console.error);
+      showToast('연결을 끊었어요');
+    } else {
+      setDoc(doc(linksCol, uid()), {from: connectFrom, to: cardId}).catch(console.error);
+      showToast('두 카드를 이었어요');
+    }
+    clearConnectSelection();
+  }
+  function clearConnectSelection(){
+    if(connectFrom){
+      const el = document.getElementById(connectFrom);
+      if(el) el.classList.remove('selected-endpoint');
+    }
+    connectFrom = null;
+  }
+
+  function deleteCard(cardId){
+    const c = cards.get(cardId);
+    if(c) mediaPathsIn(c.html).forEach(p=> deleteObject(ref(storage, p)).catch(()=>{}));
+    deleteDoc(doc(cardsCol, cardId)).catch(console.error);
+    for(const l of links.values()){
+      if(l.from===cardId || l.to===cardId) deleteDoc(doc(linksCol, l.id)).catch(console.error);
+    }
+  }
+
+  /* ---------- 선 (카드 중앙 ↔ 중앙, 점선, 흐릿하게) ---------- */
+  function updateLines(){
+    svg.innerHTML = '';
+    const vpRect = viewport.getBoundingClientRect();
+    links.forEach(l=>{
+      const a = document.getElementById(l.from), b = document.getElementById(l.to);
+      if(!a || !b) return;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      const x1 = ra.left + ra.width/2 - vpRect.left, y1 = ra.top + ra.height/2 - vpRect.top;
+      const x2 = rb.left + rb.width/2 - vpRect.left, y2 = rb.top + rb.height/2 - vpRect.top;
+      const mx=(x1+x2)/2, my=(y1+y2)/2, dx=x2-x1, dy=y2-y1;
+      const dist = Math.hypot(dx,dy)||1, nx=-dy/dist, ny=dx/dist, bow=Math.min(40, dist*0.18);
+      const cx = mx+nx*bow, cy = my+ny*bow;
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
+      path.setAttribute('class','link');
+      path.setAttribute('stroke', '#2e5266');
+      path.setAttribute('stroke-width', '1.6');
+      path.setAttribute('stroke-dasharray', '5 5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', '0.3');
+      path.addEventListener('click', async ()=>{
+        const ok = await showConfirm('이 연결선을 삭제할까요?');
+        if(ok) deleteDoc(doc(linksCol, l.id)).catch(console.error);
+      });
+      svg.appendChild(path);
+
+      [[x1,y1],[x2,y2]].forEach(([px,py])=>{
+        const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx',px); dot.setAttribute('cy',py); dot.setAttribute('r','3');
+        dot.setAttribute('fill','#2e5266'); dot.setAttribute('opacity','0.4');
+        svg.appendChild(dot);
+      });
+    });
+  }
+
+  /* ---------- 이동 / 확대축소 ---------- */
+  let isPanning=false, panStartX=0, panStartY=0, panOrigX=0, panOrigY=0;
+  viewport.addEventListener('mousedown', (e)=>{
+    if(e.target.closest('.card')) return;
+    if(connectMode){ clearConnectSelection(); return; }
+    isPanning = true; viewport.classList.add('panning');
+    panStartX = e.clientX; panStartY = e.clientY; panOrigX = panX; panOrigY = panY;
+  });
+  window.addEventListener('mousemove', (e)=>{
+    if(!isPanning) return;
+    panX = panOrigX + (e.clientX - panStartX); panY = panOrigY + (e.clientY - panStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(isPanning){ isPanning=false; viewport.classList.remove('panning'); saveLocalView(); }
+  });
+
+  let touchState = null;
+  viewport.addEventListener('touchstart', (e)=>{
+    if(e.target.closest('.card')) return;
+    if(e.touches.length===1){ touchState = {mode:'pan', x:e.touches[0].clientX, y:e.touches[0].clientY, ox:panX, oy:panY}; }
+    else if(e.touches.length===2){
+      const [t1,t2]=e.touches;
+      touchState = {mode:'pinch', d:Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY), oz:zoom, ox:panX, oy:panY,
+        cx:(t1.clientX+t2.clientX)/2, cy:(t1.clientY+t2.clientY)/2};
+    }
+  }, {passive:true});
+  viewport.addEventListener('touchmove', (e)=>{
+    if(!touchState) return;
+    if(touchState.mode==='pan' && e.touches.length===1){
+      panX = touchState.ox + (e.touches[0].clientX - touchState.x);
+      panY = touchState.oy + (e.touches[0].clientY - touchState.y);
+      applyTransform();
+    } else if(touchState.mode==='pinch' && e.touches.length===2){
+      const [t1,t2]=e.touches;
+      const d = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
+      const newZoom = Math.min(2.5, Math.max(0.25, touchState.oz*(d/touchState.d)));
+      const wx=(touchState.cx-touchState.ox)/touchState.oz, wy=(touchState.cy-touchState.oy)/touchState.oz;
+      panX = touchState.cx - wx*newZoom; panY = touchState.cy - wy*newZoom; zoom = newZoom;
+      applyTransform();
+    }
+  }, {passive:true});
+  viewport.addEventListener('touchend', ()=>{ touchState=null; saveLocalView(); });
+
+  let wheelSaveTimer;
+  viewport.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX-rect.left, my = e.clientY-rect.top;
+    const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
+    const newZoom = Math.min(2.5, Math.max(0.25, zoom*(1 + -e.deltaY*0.0016)));
+    panX = mx-worldX*newZoom; panY = my-worldY*newZoom; zoom = newZoom;
+    applyTransform();
+    clearTimeout(wheelSaveTimer); wheelSaveTimer = setTimeout(saveLocalView, 300);
+  }, {passive:false});
+
+  function zoomAtCenter(factor){
+    const rect = viewport.getBoundingClientRect();
+    const mx = rect.width/2, my = rect.height/2;
+    const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
+    zoom = Math.min(2.5, Math.max(0.25, zoom*factor));
+    panX = mx-worldX*zoom; panY = my-worldY*zoom;
+    applyTransform(); saveLocalView();
+  }
+  document.getElementById('btnZoomIn').onclick = ()=> zoomAtCenter(1.2);
+  document.getElementById('btnZoomOut').onclick = ()=> zoomAtCenter(1/1.2);
+  document.getElementById('btnReset').onclick = ()=>{
+    if(cards.size===0){ panX=0; panY=0; zoom=1; applyTransform(); saveLocalView(); return; }
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); maxX=Math.max(maxX,c.x+260); maxY=Math.max(maxY,c.y+160); });
+    const rect = viewport.getBoundingClientRect();
+    const w = maxX-minX+120, h = maxY-minY+120;
+    zoom = Math.min(1.3, Math.max(0.25, Math.min(rect.width/w, rect.height/h)));
+    panX = rect.width/2 - (minX+maxX)/2*zoom; panY = rect.height/2 - (minY+maxY)/2*zoom;
+    applyTransform(); saveLocalView();
+  };
+
+  /* ---------- 카드 추가 ---------- */
+  function addCardAt(worldX, worldY){
+    const id = uid();
+    const c = {id, x: worldX-130, y: worldY-40, date: new Date().toISOString().slice(0,10), html:''};
+    cards.set(id, c);
+    renderCard(c);
+    setDoc(doc(cardsCol, id), {x:c.x, y:c.y, date:c.date, html:'', createdAt: serverTimestamp(), updatedAt: serverTimestamp()}).catch(console.error);
+    document.getElementById(id).querySelector('.card-text').focus();
+    return c;
+  }
+  document.getElementById('btnAdd').onclick = ()=>{
+    const rect = viewport.getBoundingClientRect();
+    const wx = (rect.width/2 - panX)/zoom, wy = (rect.height/2 - panY)/zoom;
+    addCardAt(wx + (Math.random()*40-20), wy + (Math.random()*40-20));
+  };
+  viewport.addEventListener('dblclick', (e)=>{
+    if(e.target.closest('.card') || connectMode) return;
+    const rect = viewport.getBoundingClientRect();
+    addCardAt((e.clientX - rect.left - panX)/zoom, (e.clientY - rect.top - panY)/zoom);
+  });
+
+  document.getElementById('btnConnect').onclick = (e)=>{
+    connectMode = !connectMode;
+    e.currentTarget.classList.toggle('active', connectMode);
+    viewport.classList.toggle('connect-mode', connectMode);
+    document.querySelectorAll('.card').forEach(el=> el.classList.toggle('connect-mode-active', connectMode));
+    clearConnectSelection();
+    showToast(connectMode ? '카드 두 개를 눌러 연결해보세요' : '연결 모드를 껐어요');
+  };
+
+  /* ---------- 검색 ---------- */
+  document.getElementById('searchInput').addEventListener('input', (e)=>{
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('.card').forEach(el=>{
+      const c = cards.get(el.id); if(!c) return;
+      if(!q){ el.classList.remove('dimmed'); return; }
+      const hit = plainText(c.html).toLowerCase().includes(q) || (c.date||'').includes(q);
+      el.classList.toggle('dimmed', !hit);
+    });
+  });
+
+  /* ---------- 백업 (카드 + 연결선. 사진/영상은 Storage 링크로 유지됨) ---------- */
+  document.getElementById('btnExport').onclick = ()=>{
+    const payload = { version:4, exportedAt:new Date().toISOString(), cards:Array.from(cards.values()), links:Array.from(links.values()) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload)], {type:'application/json'}));
+    const a = document.createElement('a');
+    a.href = url; a.download = `thread-journal-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('백업 파일을 저장했어요');
+  };
+  document.getElementById('btnImport').onclick = ()=> document.getElementById('importInput').click();
+  document.getElementById('importInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    showConfirm('백업 내용을 현재 데이터에 추가/덮어쓸까요?', {okText:'불러오기', okClass:'confirm-ok neutral'}).then((ok)=>{
+      if(!ok){ e.target.value=''; return; }
+      const reader = new FileReader();
+      reader.onload = async ()=>{
+        try{
+          const data = JSON.parse(reader.result);
+          for(const c of data.cards||[]) await setDoc(doc(cardsCol, c.id), {x:c.x,y:c.y,date:c.date||'',html:c.html||'',updatedAt:serverTimestamp()});
+          for(const l of data.links||[]) await setDoc(doc(linksCol, l.id), {from:l.from,to:l.to});
+          showToast('불러왔어요');
+        }catch(err){ await showAlert('백업 파일을 읽지 못했어요: '+err.message); }
+      };
+      reader.readAsText(file); e.target.value='';
+    });
+  });
+
+  window.addEventListener('resize', updateLines);
+
+  /* ---------- 실시간 동기화 ---------- */
+  window.__journalReady = function(){
+    loadLocalView();
+    applyTransform();
+
+    onSnapshot(cardsCol, (snap)=>{
+      snap.docChanges().forEach(ch=>{
+        const id = ch.doc.id;
+        if(ch.type==='removed'){
+          cards.delete(id);
+          const el = document.getElementById(id); if(el) el.remove();
+        } else {
+          const d = ch.doc.data();
+          const c = {id, x:d.x||0, y:d.y||0, date:d.date||'', html:d.html||''};
+          cards.set(id, c); renderCard(c);
+        }
+      });
+      updateLines();
+      if(!ready && !snap.metadata.fromCache){
+        ready = true;
+        if(cards.size===0){
+          const rect = viewport.getBoundingClientRect();
+          addCardAt((rect.width/2 - panX)/zoom, (rect.height/2 - panY)/zoom);
+        }
+      }
+    }, (err)=>{ console.error(err); setSyncStatus('off'); });
+
+    onSnapshot(linksCol, (snap)=>{
+      snap.docChanges().forEach(ch=>{
+        if(ch.type==='removed') links.delete(ch.doc.id);
+        else links.set(ch.doc.id, {id:ch.doc.id, from:ch.doc.data().from, to:ch.doc.data().to});
+      });
+      updateLines();
+    });
+  };
+
+  /* ---------- 익명 로그인 (같은 범위 안에서 실행해야 setSyncStatus를 쓸 수 있어요) ---------- */
+  onAuthStateChanged(auth, (user)=>{
+    if(user){ setSyncStatus('ok'); window.__journalReady(); }
+  });
+  signInAnonymously(auth).catch((err)=>{
+    console.error(err);
+    setSyncStatus('off');
+    syncText.textContent = '연결 실패: ' + (err.code || err.message);
+    showAlert('클라우드 연결에 실패했어요 (' + (err.code || err.message) + '). Firebase 콘솔 > Authentication > 로그인 방법에서 익명 로그인이 켜져 있는지 확인해주세요.');
+  });
+
+  })();
+</script>
+</body>
+</html>
