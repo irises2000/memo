@@ -11,27 +11,16 @@
 <body>
 
 <div id="syncStatus"><span id="syncDot"></span><span id="syncText">연결 중…</span><button id="btnLogout">로그아웃</button></div>
-<div id="searchWrap"><input id="searchInput" type="text" placeholder="기록 검색…"></div>
+<div id="topRight">
+  <div id="searchWrap"><input id="searchInput" type="text" placeholder="기록 검색…"></div>
+  <div id="toolbar"><button class="tbtn" id="btnConnect" title="카드 두 개를 눌러 연결/해제">🔗 연결하기</button></div>
+</div>
 
 <div id="viewport">
   <svg id="lines"></svg>
   <div id="world"></div>
 </div>
 
-<div id="toolbar">
-  <button class="tbtn" id="btnAdd">＋ 새 카드</button>
-  <div class="tsep"></div>
-  <button class="tbtn" id="btnConnect">🔗 연결하기</button>
-  <div class="tsep"></div>
-  <button class="tbtn" id="btnZoomOut">－</button>
-  <span id="zoomLabel">100%</span>
-  <button class="tbtn" id="btnZoomIn">＋</button>
-  <button class="tbtn" id="btnReset">화면 정렬</button>
-  <button class="tbtn" id="btnShuffle">🔀 섞기</button>
-  <div class="tsep"></div>
-  <button class="tbtn" id="btnExport">⤓ 백업</button>
-  <button class="tbtn" id="btnImport">⤒ 불러오기</button>
-</div>
 
 <div id="lightbox"><div class="lb-close" id="lbClose">×</div><div id="lbContent"></div></div>
 <div id="toast"></div>
@@ -45,7 +34,6 @@
     <div id="loginMsg"></div>
   </div>
 </div>
-<input type="file" id="importInput" accept="application/json">
 
 <script type="module">
   /* =========================================================
@@ -147,7 +135,6 @@
 
   function applyTransform(){
     world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
-    document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+'%';
     requestAnimationFrame(updateLines);
   }
 
@@ -581,7 +568,7 @@
   }
 
   /* ---------- 부드럽게 따라오는 움직임 (ease-out) ---------- */
-  const EASE = 0.25;   // 작을수록 더 느긋하게 따라와요 (0.08 ~ 0.25 사이로 조절)
+  const EASE = 0.14;   // 작을수록 더 느긋하게 따라와요 (0.08 ~ 0.25 사이로 조절)
   const easeK = (dt)=> 1 - Math.pow(1-EASE, Math.min(50, dt)/16.67);
 
   // 화면(캔버스) 드래그
@@ -633,6 +620,7 @@
     clearCardFocus();
     if(connectMode){ clearConnectSelection(); return; }
     cancelGlide();
+    window.getSelection()?.removeAllRanges();   // 배경 드래그 시 카드 글자가 파랗게 선택되는 것 방지
     isPanning = true; viewport.classList.add('panning');
     panStartX = e.clientX; panStartY = e.clientY; panOrigX = panX; panOrigY = panY;
   });
@@ -691,20 +679,6 @@
     panX = mx-worldX*zoom; panY = my-worldY*zoom;
     applyTransform(); saveLocalView();
   }
-  document.getElementById('btnZoomIn').onclick = ()=> zoomAtCenter(1.2);
-  document.getElementById('btnZoomOut').onclick = ()=> zoomAtCenter(1/1.2);
-  document.getElementById('btnReset').onclick = ()=>{
-    cancelGlide();
-    if(cards.size===0){ panX=0; panY=0; zoom=1; applyTransform(); saveLocalView(); return; }
-    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); const r=rectOf(c); maxX=Math.max(maxX,c.x+r.w); maxY=Math.max(maxY,c.y+r.h); });
-    const rect = viewport.getBoundingClientRect();
-    const w = maxX-minX+120, h = maxY-minY+120;
-    zoom = Math.min(1.3, Math.max(0.25, Math.min(rect.width/w, rect.height/h)));
-    panX = rect.width/2 - (minX+maxX)/2*zoom; panY = rect.height/2 - (minY+maxY)/2*zoom;
-    applyTransform(); saveLocalView();
-  };
-
   /* ---------- 카드끼리 겹치지 않게: 겹치면 가장 가까운 빈자리로 틩~ 밀어냄 ---------- */
   const OVERLAP_GAP = 16; // 카드 사이 최소 간격(px)
   function rectOf(c){
@@ -749,65 +723,6 @@
     return true;
   }
 
-  /* ---------- 카드 섞기 ---------- */
-  document.getElementById('btnShuffle').onclick = async ()=>{
-    if(cards.size < 2) return;
-    const ok = await showConfirm('모든 카드를 무작위 위치에 흩뿌릴까요? 겹치지는 않아요. 지금 배치는 되돌릴 수 없어요. (먼저 ⤓ 백업을 해두면 안전해요)', {okText:'섞기', okClass:'confirm-ok neutral'});
-    if(!ok) return;
-
-    const list = Array.from(cards.values());
-
-    // 전체 카드가 차지하는 넓이의 약 4배 되는 가로로 넓은 영역에 무작위로 흩뿌림 (겹치면 다시 뽑기)
-    const sizes = new Map(list.map(c=> [c.id, rectOf(c)]));
-    let area = 0; sizes.forEach(r=> { area += (r.w+OVERLAP_GAP)*(r.h+OVERLAP_GAP); });
-    let W = Math.sqrt(area*4*1.6), H = W/1.6;
-    let minX = Infinity, minY = Infinity;
-    list.forEach(c=>{ minX = Math.min(minX, c.x); minY = Math.min(minY, c.y); });
-
-    let placed;
-    for(let attempt=0; attempt<8; attempt++){
-      placed = [];
-      let failed = false;
-      // 큰 카드부터 놓아야 자리가 잘 나와요 (위치는 전부 무작위)
-      const order = list.slice().sort((p,q)=> sizes.get(q.id).h - sizes.get(p.id).h);
-      for(const c of order){
-        const r = sizes.get(c.id);
-        let spot = null;
-        for(let t=0; t<400 && !spot; t++){
-          const x = minX + Math.random()*Math.max(1, W - r.w);
-          const y = minY + Math.random()*Math.max(1, H - r.h);
-          if(!placed.some(p=> rectsHit({x,y,w:r.w,h:r.h}, p))) spot = {x,y,w:r.w,h:r.h};
-        }
-        if(!spot){ failed = true; break; }
-        spot.id = c.id; placed.push(spot);
-      }
-      if(!failed) break;
-      W *= 1.2; H *= 1.2; placed = null;   // 자리가 모자라면 영역을 넓혀서 다시
-    }
-    if(!placed){ showAlert('섞기에 실패했어요. 다시 한 번 눌러주세요.'); return; }
-
-    placed.forEach(p=>{
-      const c = cards.get(p.id);
-      c.x = Math.round(p.x); c.y = Math.round(p.y);
-      const el = document.getElementById(c.id);
-      if(el){
-        el.classList.add('settling');
-        el.style.left = c.x+'px'; el.style.top = c.y+'px';
-        setTimeout(()=> el.classList.remove('settling'), 350);
-      }
-    });
-    const t0 = performance.now();
-    (function tick(){ updateLines(); if(performance.now()-t0 < 380) requestAnimationFrame(tick); })();
-
-    for(let i=0; i<list.length; i+=400){            // Firestore에 저장 (400개씩)
-      const batch = writeBatch(db);
-      list.slice(i, i+400).forEach(c=> batch.update(doc(cardsCol, c.id), {x:c.x, y:c.y, updatedAt: serverTimestamp()}));
-      await batch.commit().catch(console.error);
-    }
-    document.getElementById('btnReset').click();
-    showToast('카드를 섞었어요');
-  };
-
   /* ---------- 카드 추가 ---------- */
   function addCardAt(worldX, worldY){
     const id = uid();
@@ -819,11 +734,6 @@
     document.getElementById(id).querySelector('.card-text').focus();
     return c;
   }
-  document.getElementById('btnAdd').onclick = ()=>{
-    const rect = viewport.getBoundingClientRect();
-    const wx = (rect.width/2 - panX)/zoom, wy = (rect.height/2 - panY)/zoom;
-    addCardAt(wx + (Math.random()*40-20), wy + (Math.random()*40-20));
-  };
   viewport.addEventListener('dblclick', (e)=>{
     if(e.target.closest('.card') || connectMode) return;
     const rect = viewport.getBoundingClientRect();
@@ -848,33 +758,6 @@
       const hay = [plainText(c.html), c.source, c.page, c.quote, c.date].join(' ').toLowerCase();
       const hit = hay.includes(q);
       el.classList.toggle('dimmed', !hit);
-    });
-  });
-
-  /* ---------- 백업 (카드 + 연결선. 사진/영상은 Storage 링크로 유지됨) ---------- */
-  document.getElementById('btnExport').onclick = ()=>{
-    const payload = { version:4, exportedAt:new Date().toISOString(), cards:Array.from(cards.values()), links:Array.from(links.values()) };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload)], {type:'application/json'}));
-    const a = document.createElement('a');
-    a.href = url; a.download = `thread-journal-backup-${new Date().toISOString().slice(0,10)}.json`;
-    a.click(); URL.revokeObjectURL(url);
-    showToast('백업 파일을 저장했어요');
-  };
-  document.getElementById('btnImport').onclick = ()=> document.getElementById('importInput').click();
-  document.getElementById('importInput').addEventListener('change', (e)=>{
-    const file = e.target.files[0]; if(!file) return;
-    showConfirm('백업 내용을 현재 데이터에 추가/덮어쓸까요?', {okText:'불러오기', okClass:'confirm-ok neutral'}).then((ok)=>{
-      if(!ok){ e.target.value=''; return; }
-      const reader = new FileReader();
-      reader.onload = async ()=>{
-        try{
-          const data = JSON.parse(reader.result);
-          for(const c of data.cards||[]) await setDoc(doc(cardsCol, c.id), {x:c.x,y:c.y,date:c.date||'',html:c.html||'',source:c.source||'',page:c.page||'',quote:c.quote||'',important:!!c.important,updatedAt:serverTimestamp()});
-          for(const l of data.links||[]) await setDoc(doc(linksCol, l.id), {from:l.from,to:l.to});
-          showToast('불러왔어요');
-        }catch(err){ await showAlert('백업 파일을 읽지 못했어요: '+err.message); }
-      };
-      reader.readAsText(file); e.target.value='';
     });
   });
 

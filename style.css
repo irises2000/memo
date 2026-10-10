@@ -4,7 +4,7 @@
   --card-border:#ababab;
   --ink:#313131;
   --ink-soft:#6c6c6c;
-  --accent:#652e66;
+  --accent:#2e5266;
   --accent-soft:rgba(46,82,102,0.16);
   --date-color:#9a9a9a;
   --danger:#a6453a;
@@ -20,6 +20,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-canvas);font-
   background-size: 26px 26px;
 }
 #viewport.panning{cursor:grabbing;}
+#viewport.panning, #viewport.panning *{ -webkit-user-select:none; user-select:none; }
 #viewport.connect-mode{cursor:crosshair;}
 #world{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; will-change:transform; }
 svg#lines{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
@@ -27,7 +28,7 @@ svg#lines path.link{ pointer-events:stroke; cursor:pointer; }
 svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !important; }
 
 .card{
-  position:absolute; width:400px;
+  position:absolute; width: 700px;
   background:#ffffff;
   /* border:1px solid var(--card-border); */
   border-radius:16px;
@@ -39,7 +40,7 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .card:hover{ box-shadow: 0 0 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.2); }
 .card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }
 .card.dimmed, .card.src-dim{ opacity:0.28; }
-.card.important{ border-color:#7ed321; box-shadow:0 0 0 2px rgba(126,211,33,0.28), 0 6px 16px rgba(0,0,0,0.14); }
+.card.important{ border-color:#7ed321; box-shadow:0 0 0 2px rgb(132, 255, 0), 0 6px 16px rgba(0,0,0,0.14); }
 .card.connect-mode-active .card-body,
 .card.connect-mode-active .card-meta,
 .card.connect-mode-active .card-quote{ pointer-events:none; }
@@ -101,22 +102,22 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
   display:flex; align-items:center; justify-content:center;
 }
 
+#topRight{ position:fixed; top:18px; right:20px; z-index:40; display:flex; flex-direction:column; gap:8px; align-items:stretch; }
 #toolbar{
-  position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
-  display:flex; align-items:center; gap:6px;
+  display:flex; align-items:center; justify-content:center;
   background:rgba(30,29,27,0.88); backdrop-filter:blur(8px);
   border:1px solid rgba(255,255,255,0.08);
-  padding:7px 8px; border-radius:999px; z-index:50;
-  box-shadow:0 8px 30px rgba(0,0,0,0.4);
+  padding:2px; border-radius:999px;
+  box-shadow:0 6px 20px rgba(0,0,0,0.3);
 }
-.tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:8px 13px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+#toolbar .tbtn{ width:100%; justify-content:center; }
+.tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:6px 10px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
 .tbtn:hover{ background:rgba(255,255,255,0.09); }
 .tbtn.active{ background:var(--accent); color:#fff; }
 .tsep{ width:1px; height:18px; background:rgba(255,255,255,0.14); margin:0 2px; }
-#zoomLabel{ color:#a99; font-size:12px; min-width:38px; text-align:center; }
 
-#searchWrap{ position:fixed; top:18px; right:20px; z-index:40; }
-#searchInput{ background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
+#searchWrap{ position:static; }
+#searchInput{ display:block; background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
 #searchInput::placeholder{ color:#8b8578; }
 
 #syncStatus{ position:fixed; top:22px; left:20px; z-index:40; display:flex; align-items:center; gap:6px; font-size:11.5px; color:#9a9486; }
@@ -131,7 +132,7 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 
 #importInput{ display:none; }
 
-#toast{ position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#2b2924; color:#ece7db; padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+#toast{ position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#2b2924; color:#ece7db; padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; opacity:0; pointer-events:none; transition:opacity .25s ease; }
 #toast.show{ opacity:1; }
 
 .confirm-overlay{ position:fixed; inset:0; background:rgba(20,18,15,0.4); z-index:300; display:flex; align-items:center; justify-content:center; }
