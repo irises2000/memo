@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>실타래</title>
+<title>붙잡기기</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
     --bg-canvas:#ffffff;
     --dot:rgba(0,0,0,0.08);
     --card-border:#c9bfa8;
-    --ink:#33302a;
+    --ink:#33302a;localhost:5500
     --ink-soft:#6b6558;
     --accent:#2e5266;
     --accent-soft:rgba(46,82,102,0.16);
@@ -123,6 +123,17 @@
   #setupWarning p{ line-height:1.7; font-size:14px; color:#555; margin:0; }
   #setupWarning code{ background:#f3f1ec; padding:2px 6px; border-radius:4px; font-size:12.5px; }
 
+  #btnLogout{ border:none; background:transparent; color:#b0aa9c; font-size:11.5px; font-family:'Inter',sans-serif; cursor:pointer; padding:2px 6px; border-radius:4px; margin-left:4px; }
+  #btnLogout:hover{ color:var(--danger); background:rgba(166,69,58,0.08); }
+
+  #loginScreen{ position:fixed; inset:0; z-index:400; background:#fff; display:none; align-items:center; justify-content:center; padding:24px; }
+  .login-box{ text-align:center; max-width:320px; }
+  .login-box h1{ font-family:'Fraunces',serif; font-weight:500; font-size:28px; margin:0 0 8px; }
+  .login-box p{ color:var(--ink-soft); font-size:14px; margin:0 0 22px; }
+  #btnGoogle{ border:1px solid #d6d2c8; background:#fff; color:var(--ink); font-size:14px; font-family:'Inter',sans-serif; padding:11px 22px; border-radius:999px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  #btnGoogle:hover{ background:#faf9f6; }
+  #loginMsg{ margin-top:14px; font-size:12.5px; color:var(--danger); min-height:18px; word-break:break-all; }
+
   @media (max-width:640px){
     .card{ width:220px; }
     #searchInput{ width:120px; }
@@ -132,7 +143,7 @@
 </head>
 <body>
 
-<div id="syncStatus"><span id="syncDot"></span><span id="syncText">연결 중…</span></div>
+<div id="syncStatus"><span id="syncDot"></span><span id="syncText">연결 중…</span><button id="btnLogout">로그아웃</button></div>
 <div id="searchWrap"><input id="searchInput" type="text" placeholder="기록 검색…"></div>
 
 <div id="viewport">
@@ -156,6 +167,15 @@
 
 <div id="lightbox"><div class="lb-close" id="lbClose">×</div><div id="lbContent"></div></div>
 <div id="toast"></div>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>메모</h1>
+    <p>내 구글 계정으로 로그인해주세요.</p>
+    <button id="btnGoogle">Google로 로그인</button>
+    <div id="loginMsg"></div>
+  </div>
+</div>
 <input type="file" id="importInput" accept="application/json">
 
 <script type="module">
@@ -163,20 +183,15 @@
      Firebase 설정 — 아래 값을 본인 Firebase 프로젝트의 값으로 교체하세요.
      (Firebase 콘솔 > 프로젝트 설정 > 내 앱 > SDK 설정 및 구성)
   ========================================================= */
-  const firebaseConfig = {
-  apiKey: "AIzaSyA3ko19m2hHj1Ox20gQhXFkR2aOcYkziK8",
-  authDomain: "keeping-machine.firebaseapp.com",
-  projectId: "keeping-machine",
-  storageBucket: "keeping-machine.firebasestorage.app",
-  messagingSenderId: "778361559999",
-  appId: "1:778361559999:web:1dae4e1819bdc3132a1f0a"
-  };
+  /* 설정값은 firebase-config.js 파일에 따로 넣어요 (index.html을 고쳐도 설정이 안 날아가요) */
+  let firebaseConfig;
+  try{ ({ firebaseConfig } = await import('./firebase-config.js')); }catch(e){ firebaseConfig = {apiKey:"YOUR_API_KEY"}; }
 
-  if(firebaseConfig.apiKey === "YOUR_API_KEY"){
+  if(!firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY"){
     document.body.innerHTML = `
       <div id="setupWarning"><div class="box">
         <h1>Firebase 설정이 필요해요</h1>
-        <p>index.html 안의 <code>firebaseConfig</code> 값을 본인의 Firebase 프로젝트 값으로 바꿔주세요.</p>
+        <p><code>firebase-config.js</code> 파일의 값을 본인의 Firebase 프로젝트 값으로 바꿔주세요. 파일이 index.html과 같은 폴더에 있는지도 확인해주세요.</p>
       </div></div>`;
     throw new Error("Firebase config not set");
   }
@@ -184,7 +199,7 @@
   const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
   const { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence, serverTimestamp } =
     await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js");
-  const { getAuth, signInAnonymously, onAuthStateChanged } =
+  const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } =
     await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
   const { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } =
     await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js");
@@ -733,16 +748,33 @@
     });
   };
 
-  /* ---------- 익명 로그인 (같은 범위 안에서 실행해야 setSyncStatus를 쓸 수 있어요) ---------- */
-  onAuthStateChanged(auth, (user)=>{
-    if(user){ setSyncStatus('ok'); window.__journalReady(); }
+  /* ---------- 구글 로그인 ---------- */
+  const loginScreen = document.getElementById('loginScreen');
+  const loginMsg = document.getElementById('loginMsg');
+  let started = false;
+
+  onAuthStateChanged(auth, async (user)=>{
+    if(user && user.isAnonymous){ await signOut(auth); return; } // 예전 익명 세션 정리
+    if(user){
+      loginScreen.style.display = 'none';
+      setSyncStatus('ok');
+      if(!started){ started = true; window.__journalReady(); }
+    } else {
+      loginScreen.style.display = 'flex';
+      setSyncStatus('off');
+      syncText.textContent = '로그인 필요';
+    }
   });
-  signInAnonymously(auth).catch((err)=>{
-    console.error(err);
-    setSyncStatus('off');
-    syncText.textContent = '연결 실패: ' + (err.code || err.message);
-    showAlert('클라우드 연결에 실패했어요 (' + (err.code || err.message) + '). Firebase 콘솔 > Authentication > 로그인 방법에서 익명 로그인이 켜져 있는지 확인해주세요.');
-  });
+
+  document.getElementById('btnGoogle').onclick = async ()=>{
+    loginMsg.textContent = '';
+    try{ await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch(err){ console.error(err); loginMsg.textContent = '로그인 실패: ' + (err.code || err.message); }
+  };
+  document.getElementById('btnLogout').onclick = async ()=>{
+    const ok = await showConfirm('로그아웃할까요?', {okText:'로그아웃', okClass:'confirm-ok neutral'});
+    if(ok){ await signOut(auth); location.reload(); }
+  };
 
   })();
 </script>
