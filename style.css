@@ -1,68 +1,119 @@
+/* =====================================================================
+   style.css — 화면 꾸미기(디자인)는 전부 이 파일에서 고쳐요.
+   위에서부터: 1.색상변수 2.기본 3.캔버스 4.연결선 5.카드 6.카드 머리 7.출처/쪽수
+   8.인용문 9.본문/날짜 10.사진·영상 11.접점 태그 12.우상단 메뉴 13.동기화 표시
+   14.사진 확대 15.토스트 16.확인 팝업 17.설정 경고 18.로그인 19.모바일
+   ===================================================================== */
+
+
+/* ========== 1. 색상 변수 (자주 바꾸는 색은 여기서) ========== */
 :root{
-  --bg-canvas:#000000;
-  --dot:rgba(0,0,0,0.08);
+  --bg-canvas:#e8e8e8;                 /* 캔버스 배경색 */
+  --dot:rgba(0,0,0,0.08);              /* 배경 점 무늬 색 */
   --card-border:#ababab;
-  --ink:#313131;
-  --ink-soft:#6c6c6c;
-  --accent:#2e5266;
+  --ink:#313131;                       /* 기본 글자색 */
+  --ink-soft:#6c6c6c;                  /* 흐린 글자색 */
+  --accent:#2e5266;                    /* 강조색(연결 모드 버튼 등) */
   --accent-soft:rgba(46,82,102,0.16);
-  --date-color:#9a9a9a;
-  --danger:#a6453a;
+  --date-color:#9a9a9a;                /* 날짜 글자색 */
+  --danger:#a6453a;                    /* 삭제/경고색 */
   --paper-line:#e2e2e2;
-  --ok:#5c8a6a;
-  --warn:#ff2a2a;
+  --ok:#5c8a6a;                        /* 동기화 성공 점 */
+  --warn:#ff2a2a;                      /* 연결 중 점 */
+
+  --line-color:#e0556b;                /* 연결선 색 (선과 양 끝 점) */
+  --tag-pin:#ff4f9a;                   /* 접점 태그 동그라미 색 */
+  --tag-bg:rgba(255,140,192,0.55);     /* 접점 태그 카드 배경 (마지막 숫자가 투명도) */
+  --tag-ink:#3d0f26;                   /* 접점 태그 글자색 */
 }
+
+
+/* ========== 2. 기본 ========== */
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-canvas);font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
+
+
+/* ========== 3. 캔버스 (끝없는 배경 + 확대/이동 영역) ========== */
 #viewport{
   position:fixed; inset:0; overflow:hidden; cursor:grab;
   background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px);
   background-size: 26px 26px;
 }
 #viewport.panning{cursor:grabbing;}
-#viewport.panning, #viewport.panning *{ -webkit-user-select:none; user-select:none; }
+#viewport.panning, #viewport.panning *{ -webkit-user-select:none; user-select:none; }  /* 배경 드래그 중 글자 선택 방지 */
 #viewport.connect-mode{cursor:crosshair;}
-#world{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; will-change:transform; }
-svg#lines{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
-svg#lines path.link{ pointer-events:stroke; cursor:pointer; }
-svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !important; }
+#world{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; will-change:transform; }  /* 카드가 들어있는 층 */
+#tagWorld{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; z-index:8; pointer-events:none; will-change:transform; }  /* 접점 태그가 들어있는 층 (카드·선보다 위) */
 
+
+/* ========== 4. 연결선 ========== */
+svg#lines{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
+
+/* 눈에 보이는 점선 */
+svg#lines path.link{
+  fill:none; stroke:var(--line-color); stroke-width:1.6; stroke-dasharray:5 5;
+  opacity:0.3; pointer-events:stroke;
+}
+svg#lines path.link.is-active{ stroke-width:2.2; opacity:0.85; }   /* 연결 보기 중, 선택한 카드의 선 */
+svg#lines path.link.is-dim{ opacity:0.08; }                         /* 연결 보기 중, 관계없는 선 */
+
+/* 눈에 안 보이는 두꺼운 클릭 영역 (더블클릭하기 쉽게) */
+svg#lines path.link-hit{ fill:none; stroke:transparent; stroke-width:16; pointer-events:stroke; }
+
+/* 선 양쪽 끝 점 */
+svg#lines circle.link-dot{ fill:var(--line-color); opacity:0.3; }
+svg#lines circle.link-dot.is-active{ opacity:0.85; }
+svg#lines circle.link-dot.is-dim{ opacity:0.08; }
+
+
+/* ========== 5. 카드 본체 ========== */
 .card{
-  position:absolute; width: 700px;
+  position:absolute; width:500px;                 /* ← 카드 가로 폭 */
   background:#ffffff;
   /* border:1px solid var(--card-border); */
-  border-radius:16px;
+  border-radius:16px;                             /* ← 모서리 둥글기 */
   box-shadow: 0 0 0 rgba(0,0,0,0.25), 0 6px 16px rgba(0,0,0,0.14);
   z-index:10;
   transition: box-shadow .15s ease, border-color .15s ease;
 }
-.card.settling{ transition: left .3s cubic-bezier(.2,.9,.3,1.15), top .3s cubic-bezier(.2,.9,.3,1.15), box-shadow .15s ease; }
+.card.raised{ z-index:999; }                       /* 마지막으로 옮긴 카드를 맨 위로 */
+.card.settling{ transition: left .3s cubic-bezier(.2,.9,.3,1.15), top .3s cubic-bezier(.2,.9,.3,1.15), box-shadow .15s ease; }  /* 겹침 방지로 밀려날 때 움직임 */
 .card:hover{ box-shadow: 0 0 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.2); }
-.card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }
-.card.dimmed, .card.src-dim{ opacity:0.28; }
-.card.important{ border-color:#7ed321; box-shadow:0 0 0 2px rgb(132, 255, 0), 0 6px 16px rgba(0,0,0,0.14); }
+.card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }  /* 연결 모드에서 첫 번째로 고른 카드 */
+.card.dimmed, .card.src-dim{ opacity:0.28; }       /* 검색/강조에서 제외된 카드 */
+.card.important{ border-color:#7ed321; box-shadow:0 0 0 2px rgba(126,211,33,0.28), 0 6px 16px rgba(0,0,0,0.14); }  /* ★ 중요 카드 바깥 고리 */
+
+/* 연결 모드일 때: 카드 안쪽은 클릭 막고 카드 전체를 클릭 대상으로 */
+.card.connect-mode-active{ cursor:pointer; }
 .card.connect-mode-active .card-body,
 .card.connect-mode-active .card-meta,
-.card.connect-mode-active .card-quote{ pointer-events:none; }
+.card.connect-mode-active .card-quote,
+.card.connect-mode-active .card-foot{ pointer-events:none; }
 .card.connect-mode-active .card-del,
-.card.connect-mode-active .card-star{ display:none; }
-.card.connect-mode-active{ cursor:pointer; }
+.card.connect-mode-active .card-star,
+.card.connect-mode-active .card-quote-btn{ display:none; }
 
 /* 출처 색 띠: 사용 안 함 (숨김) */
 .src-band{ display:none !important; }
 
+
+/* ========== 6. 카드 머리 (⠿ 드래그 손잡이, ❝ ★ × 버튼) ========== */
 .card-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 7px 12px; cursor:grab; user-select:none; }
 .card-head:active{ cursor:grabbing; }
 .drag-dots{ color:var(--ink-soft); font-size:13px; letter-spacing:1px; opacity:.6; }
-.date-input{ font-family:'Fraunces', serif; font-size:13.5px; color:var(--date-color); border:none; background:transparent; outline:none; width:112px; cursor:text; text-align:right; }
-.card-star{ margin-left:0; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
-.card-quote-btn{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; font-family:'Fraunces',serif; }
+
+.card-quote-btn{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; font-family:'Fraunces',serif; }  /* ❝ 인용문 열기 */
 .card-quote-btn:hover, .card.has-quote .card-quote-btn{ color:var(--ink-soft); background:rgba(0,0,0,0.06); }
-.card.connect-mode-active .card-quote-btn{ display:none; }
+
+.card-star{ margin-left:0; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }  /* ★ 중요 표시 */
 .card-star:hover{ color:#7ed321; background:rgba(126,211,33,0.12); }
 .card.important .card-star{ color:#7ed321; }
-.card-del{ border:none; background:transparent; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
+
+.card-del{ border:none; background:transparent; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }  /* × 카드 삭제 */
 .card-del:hover{ color:var(--danger); background:rgba(166,69,58,0.1); }
+
+
+/* ========== 7. 출처 / 쪽수 ========== */
 .card-meta{ display:flex; gap:6px; padding:0 12px 6px; }
 .meta-source, .meta-page{
   border:none; outline:none; background:transparent; font-family:'Inter',sans-serif;
@@ -73,25 +124,30 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .meta-source:hover, .meta-page:hover, .meta-source:focus, .meta-page:focus{ border-bottom-color:var(--paper-line); }
 .meta-source::placeholder, .meta-page::placeholder{ color:#bdb6a3; font-weight:400; }
 
+
+/* ========== 8. 인용문 (비어 있으면 숨김, ❝ 버튼으로 열기) ========== */
 .card-quote{ display:none; padding:0 12px 4px; }
 .card.has-quote .card-quote{ display:block; }
 .quote-input{
   display:block; width:100%; resize:none; overflow:hidden; min-height:26px;
-  border:none; outline:none; background:#eeeeee; border-left:3px solid #b8b8b8; border-radius:3px 8px 8px 3px;
+  border:none; outline:none; background:#eeeeee; border-left:3px solid #b8b8b8; border-radius:3px 8px 8px 3px;  /* 배경색 / 왼쪽 세로선 */
   padding:7px 10px; font-family:'Fraunces','Inter',serif; font-size:13.5px; line-height:1.6; color:#4a463d;
 }
 .quote-input::placeholder{ color:#bdb6a3; font-family:'Inter',sans-serif; font-size:12.5px; }
-.card.important .quote-input{ background:#c9f76a; border-left-color:#7ed321; font-weight:600; color:#2c3a10; }
+.card.important .quote-input{ background:#c9f76a; border-left-color:#7ed321; font-weight:600; color:#2c3a10; }  /* ★ 중요 카드의 형광펜 인용문 */
 
+
+/* ========== 9. 본문 / 날짜 (카드 아래쪽) ========== */
 .card-body{ padding:6px 12px 4px; }
-.card-foot{ display:flex; justify-content:flex-end; padding:0 12px 10px; }
-.card.connect-mode-active .card-foot{ pointer-events:none; }
-
-.card-text{ outline:none; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; color:var(--ink); word-break:break-word; }
+.card-text{ outline:none; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; color:var(--ink); word-break:break-word; min-height:48px; }
 .card-text:empty:before{ content: attr(data-placeholder); color:#b7ae98; }
-.card-text{ min-height:48px; }
-.card-text.drag-over{ outline:2px dashed var(--accent); outline-offset:2px; border-radius:4px; }
+.card-text.drag-over{ outline:2px dashed var(--accent); outline-offset:2px; border-radius:4px; }  /* 사진을 끌어다 놓을 때 */
 
+.card-foot{ display:flex; justify-content:flex-end; padding:0 12px 10px; }
+.date-input{ font-family:'Fraunces', serif; font-size:13.5px; color:var(--date-color); border:none; background:transparent; outline:none; width:112px; cursor:text; text-align:right; }
+
+
+/* ========== 10. 본문 안의 사진 / 영상 ========== */
 .embed{ position:relative; margin:8px 0; max-width:100%; }
 .embed img, .embed video{ max-width:100%; border-radius:4px; display:block; }
 .embed img{ cursor:zoom-in; }
@@ -102,7 +158,34 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
   display:flex; align-items:center; justify-content:center;
 }
 
+
+/* ========== 11. 접점 태그 (연결선 위 핑크 메모) ========== */
+svg#lines circle.tag-pin{ fill:var(--tag-pin); stroke:#fff; stroke-width:1.5; }   /* 선 위의 동그라미 */
+svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
+
+.tag-card{
+  position:absolute; pointer-events:auto; width:100px; transform:translate(-50%,-100%);
+  background:var(--tag-bg); border-radius:12px; padding:7px 10px 8px;
+  box-shadow:0 4px 14px rgba(255,60,140,0.3); transition:opacity .15s ease;
+}
+.tag-card.is-dim{ opacity:0.25; }                  /* 연결 보기 중, 관계없는 태그 */
+.tag-card textarea{
+  display:block; width:100%; resize:none; overflow:hidden; min-height:20px;
+  border:none; outline:none; background:transparent;
+  font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.5; color:var(--tag-ink);
+}
+.tag-card textarea::placeholder{ color:rgba(61,15,38,0.5); }
+.tag-del{ position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; border:none; background:#fff; color:#c2185b; font-size:12px; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.25); }
+.tag-card:hover .tag-del{ display:flex; }
+
+
+/* ========== 12. 우상단 메뉴 (검색창 + 연결하기 버튼) ========== */
 #topRight{ position:fixed; top:18px; right:20px; z-index:40; display:flex; flex-direction:column; gap:8px; align-items:stretch; }
+
+#searchWrap{ position:static; }
+#searchInput{ display:block; background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
+#searchInput::placeholder{ color:#8b8578; }
+
 #toolbar{
   display:flex; align-items:center; justify-content:center;
   background:rgba(30,29,27,0.88); backdrop-filter:blur(8px);
@@ -113,28 +196,31 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 #toolbar .tbtn{ width:100%; justify-content:center; }
 .tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:6px 10px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
 .tbtn:hover{ background:rgba(255,255,255,0.09); }
-.tbtn.active{ background:var(--accent); color:#fff; }
-.tsep{ width:1px; height:18px; background:rgba(255,255,255,0.14); margin:0 2px; }
+.tbtn.active{ background:var(--accent); color:#fff; }   /* 연결 모드 켜졌을 때 */
 
-#searchWrap{ position:static; }
-#searchInput{ display:block; background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
-#searchInput::placeholder{ color:#8b8578; }
 
+/* ========== 13. 좌상단 동기화 표시 + 로그아웃 ========== */
 #syncStatus{ position:fixed; top:22px; left:20px; z-index:40; display:flex; align-items:center; gap:6px; font-size:11.5px; color:#9a9486; }
 #syncDot{ width:7px; height:7px; border-radius:50%; background:var(--warn); transition:background .3s ease; }
 #syncDot.ok{ background:var(--ok); }
 #syncDot.off{ background:var(--danger); }
+#btnLogout{ border:none; background:transparent; color:#b0aa9c; font-size:11.5px; font-family:'Inter',sans-serif; cursor:pointer; padding:2px 6px; border-radius:4px; margin-left:4px; }
+#btnLogout:hover{ color:var(--danger); background:rgba(166,69,58,0.08); }
 
+
+/* ========== 14. 사진 확대 보기 ========== */
 #lightbox{ position:fixed; inset:0; background:rgba(10,10,9,0.92); z-index:200; display:none; align-items:center; justify-content:center; padding:40px; }
 #lightbox.show{ display:flex; }
 #lightbox img{ max-width:100%; max-height:100%; border-radius:4px; }
 #lightbox .lb-close{ position:fixed; top:22px; right:26px; color:#eee; font-size:26px; cursor:pointer; background:rgba(255,255,255,0.08); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
 
-#importInput{ display:none; }
 
+/* ========== 15. 하단 토스트 알림 ========== */
 #toast{ position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#2b2924; color:#ece7db; padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; opacity:0; pointer-events:none; transition:opacity .25s ease; }
 #toast.show{ opacity:1; }
 
+
+/* ========== 16. 확인/알림 팝업 (삭제할까요? 등) ========== */
 .confirm-overlay{ position:fixed; inset:0; background:rgba(20,18,15,0.4); z-index:300; display:flex; align-items:center; justify-content:center; }
 .confirm-box{ background:#fff; border-radius:10px; padding:20px 22px; width:280px; box-shadow:0 24px 60px rgba(0,0,0,0.3); }
 .confirm-box p{ margin:0 0 16px; font-size:14px; line-height:1.6; color:var(--ink); }
@@ -146,15 +232,16 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .confirm-ok:hover{ filter:brightness(1.08); }
 .confirm-ok.neutral{ background:var(--accent); }
 
+
+/* ========== 17. Firebase 설정 경고 화면 ========== */
 #setupWarning{ position:fixed; inset:0; z-index:500; background:#fff; display:flex; align-items:center; justify-content:center; padding:30px; }
 #setupWarning .box{ max-width:520px; border:1px solid #ddd; border-radius:10px; padding:26px 28px; }
 #setupWarning h1{ font-family:'Fraunces',serif; font-size:21px; margin:0 0 10px; }
 #setupWarning p{ line-height:1.7; font-size:14px; color:#555; margin:0; }
 #setupWarning code{ background:#f3f1ec; padding:2px 6px; border-radius:4px; font-size:12.5px; }
 
-#btnLogout{ border:none; background:transparent; color:#b0aa9c; font-size:11.5px; font-family:'Inter',sans-serif; cursor:pointer; padding:2px 6px; border-radius:4px; margin-left:4px; }
-#btnLogout:hover{ color:var(--danger); background:rgba(166,69,58,0.08); }
 
+/* ========== 18. 로그인 화면 ========== */
 #loginScreen{ position:fixed; inset:0; z-index:400; background:#fff; display:none; align-items:center; justify-content:center; padding:24px; }
 .login-box{ text-align:center; max-width:320px; }
 .login-box h1{ font-family:'Fraunces',serif; font-weight:500; font-size:28px; margin:0 0 8px; }
@@ -163,6 +250,8 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 #btnGoogle:hover{ background:#faf9f6; }
 #loginMsg{ margin-top:14px; font-size:12.5px; color:var(--danger); min-height:18px; word-break:break-all; }
 
+
+/* ========== 19. 모바일 (화면 폭 640px 이하) ========== */
 @media (max-width:640px){
   .card{ width:220px; }
   #searchInput{ width:120px; }

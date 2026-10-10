@@ -10,22 +10,29 @@
 </head>
 <body>
 
+<!-- [좌상단] 동기화 상태 + 로그아웃 -->
 <div id="syncStatus"><span id="syncDot"></span><span id="syncText">연결 중…</span><button id="btnLogout">로그아웃</button></div>
+<!-- [우상단] 검색창 + 연결하기 버튼 -->
 <div id="topRight">
   <div id="searchWrap"><input id="searchInput" type="text" placeholder="기록 검색…"></div>
   <div id="toolbar"><button class="tbtn" id="btnConnect" title="카드 두 개를 눌러 연결/해제">🔗 연결하기</button></div>
 </div>
 
+<!-- [캔버스] 선(svg) / 카드 층(world) / 접점 태그 층(tagWorld) -->
 <div id="viewport">
   <svg id="lines"></svg>
   <div id="world"></div>
+  <div id="tagWorld"></div>
 </div>
 
 
+<!-- [사진 확대 보기] -->
 <div id="lightbox"><div class="lb-close" id="lbClose">×</div><div id="lbContent"></div></div>
+<!-- [하단 알림] -->
 <div id="toast"></div>
 <datalist id="sourceList"></datalist>
 
+<!-- [로그인 화면] -->
 <div id="loginScreen">
   <div class="login-box">
     <h1>메모</h1>
@@ -109,6 +116,7 @@
 
   const viewport = document.getElementById('viewport');
   const world = document.getElementById('world');
+  const tagWorld = document.getElementById('tagWorld');
   const svg = document.getElementById('lines');
   const toast = document.getElementById('toast');
   const syncDot = document.getElementById('syncDot');
@@ -134,7 +142,7 @@
   function saveLocalView(){ try{ localStorage.setItem('thread-journal-view', JSON.stringify({panX,panY,zoom})); }catch(e){} }
 
   function applyTransform(){
-    world.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    world.style.transform = tagWorld.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
     requestAnimationFrame(updateLines);
   }
 
@@ -155,7 +163,6 @@
   }
   let focusSource = null; // 지금 강조 중인 출처 (없으면 null)
   let focusCard = null;   // 카드 상단을 더블클릭해서 강조 중인 카드 (없으면 null)
-  const LINE_COLOR = '#e0556b'; // 연결선 색 — 여기만 바꾸면 선과 끝점 색이 함께 바뀌어요
   function linkedSet(){
     const s = new Set();
     if(!focusCard) return s;
@@ -454,7 +461,7 @@
       e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
-      el.style.zIndex = 999;
+      el.classList.add('raised');   // 마지막으로 옮긴 카드를 맨 위로 (스타일은 style.css의 .card.raised)
       const drag = makeDragger(cardId, el);
       function onMove(ev){
         drag.to(ox + (ev.clientX - startX)/zoom, oy + (ev.clientY - startY)/zoom);
@@ -529,9 +536,15 @@
   }
 
   /* ---------- 선 (카드 중앙 ↔ 중앙, 점선, 흐릿하게) ---------- */
+  const tagEls = new Map(); // "linkId:tagId" -> 태그 카드 element
+
+  // 곡선 위의 점 (t: 0~1)
+  const bez = (t, p0, c, p2)=> (1-t)*(1-t)*p0 + 2*(1-t)*t*c + t*t*p2;
+
   function updateLines(){
     svg.innerHTML = '';
     const vpRect = viewport.getBoundingClientRect();
+    const liveTags = new Set();
     links.forEach(l=>{
       const a = document.getElementById(l.from), b = document.getElementById(l.to);
       if(!a || !b) return;
@@ -541,30 +554,111 @@
       const mx=(x1+x2)/2, my=(y1+y2)/2, dx=x2-x1, dy=y2-y1;
       const dist = Math.hypot(dx,dy)||1, nx=-dy/dist, ny=dx/dist, bow=Math.min(40, dist*0.18);
       const cx = mx+nx*bow, cy = my+ny*bow;
+      const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+      const mine = !focusCard || l.from===focusCard || l.to===focusCard;
+      const state = !focusCard ? '' : (mine ? ' is-active' : ' is-dim');   // 연결 보기 상태 (모양은 style.css에서)
+
+      // 선을 더블클릭: 누른 자리에 접점 태그 만들기 (한 선에 여러 개 가능)
+      const onDbl = (e)=>{
+        e.stopPropagation();
+        if(!(connectMode || (focusCard && mine))) return;   // 연결 모드이거나, 연결 보기 중인 선일 때만
+        const sx = e.clientX - vpRect.left, sy = e.clientY - vpRect.top;
+        let bestT = 0.5, bestD = Infinity;
+        for(let i=1; i<50; i++){
+          const t = i/50;
+          const dd = Math.hypot(bez(t,x1,cx,x2)-sx, bez(t,y1,cy,y2)-sy);
+          if(dd < bestD){ bestD = dd; bestT = t; }
+        }
+        createTag(l.id, bestT);
+      };
+
+      // 두껍고 투명한 클릭 영역 (얇은 선을 쉽게 누를 수 있게)
+      const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+      hit.setAttribute('d', d); hit.setAttribute('class','link-hit');
+      hit.addEventListener('dblclick', onDbl);
+      svg.appendChild(hit);
 
       const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-      path.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
-      path.setAttribute('class','link');
-      const mine = !focusCard || l.from===focusCard || l.to===focusCard;
-      const lineOpacity = !focusCard ? 0.3 : (mine ? 0.85 : 0.08);
-      path.setAttribute('stroke', LINE_COLOR);
-      path.setAttribute('stroke-width', (focusCard && mine) ? '2.2' : '1.6');
-      path.setAttribute('stroke-dasharray', '5 5');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('opacity', lineOpacity);
-      path.addEventListener('click', async ()=>{
-        const ok = await showConfirm('이 연결선을 삭제할까요?');
-        if(ok) deleteDoc(doc(linksCol, l.id)).catch(console.error);
-      });
+      path.setAttribute('d', d);
+      path.setAttribute('class','link'+state);
+      path.addEventListener('dblclick', onDbl);
       svg.appendChild(path);
 
       [[x1,y1],[x2,y2]].forEach(([px,py])=>{
         const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        dot.setAttribute('cx',px); dot.setAttribute('cy',py); dot.setAttribute('r','3');
-        dot.setAttribute('fill', LINE_COLOR); dot.setAttribute('opacity', lineOpacity);
+        dot.setAttribute('cx',px); dot.setAttribute('cy',py); dot.setAttribute('r','3');   // r = 끝 점 크기
+        dot.setAttribute('class','link-dot'+state);
         svg.appendChild(dot);
       });
+
+      /* 선 위의 핑크 접점 태그들 */
+      (l.tags||[]).forEach(tg=>{
+        const key = l.id+':'+tg.id;
+        liveTags.add(key);
+        let el = tagEls.get(key);
+        if(!el) el = makeTagEl(l.id, tg.id);
+        const px = bez(tg.t, x1, cx, x2), py = bez(tg.t, y1, cy, y2);
+        const pin = document.createElementNS('http://www.w3.org/2000/svg','circle');   // 태그가 붙는 자리의 점
+        pin.setAttribute('cx', px); pin.setAttribute('cy', py); pin.setAttribute('r', '5');   // r = 태그 동그라미 크기
+        pin.setAttribute('class', 'tag-pin' + (mine ? '' : ' is-dim'));
+        svg.appendChild(pin);
+        el.style.left = ((px - panX)/zoom)+'px';
+        el.style.top = ((py - panY)/zoom - 12)+'px';   // 점 바로 위에 카드가 놓이게 12px 띄움
+        el.classList.toggle('is-dim', !mine);
+        const ta = el.querySelector('textarea');
+        if(document.activeElement !== ta && ta.value !== (tg.note||'')) ta.value = tg.note || '';
+      });
     });
+    tagEls.forEach((el, key)=>{ if(!liveTags.has(key)){ el.remove(); tagEls.delete(key); } });
+  }
+
+  const findTag = (linkId, tagId)=> (links.get(linkId)?.tags || []).find(t=> t.id===tagId);
+  function persistTags(linkId){
+    const l = links.get(linkId); if(!l) return;
+    // tag/note는 예전(태그 1개) 방식의 값이라 비워서 다시 읽히지 않게 함
+    updateDoc(doc(linksCol, linkId), {tags: l.tags, tag:false, note:''}).catch(console.error);
+  }
+
+  function makeTagEl(linkId, tagId){
+    const t = document.createElement('div');
+    t.className = 'tag-card';
+    t.innerHTML = `<button class="tag-del" title="태그 삭제">×</button><textarea rows="1" placeholder="" maxlength="500"></textarea>`;
+    tagWorld.appendChild(t);
+    tagEls.set(linkId+':'+tagId, t);
+    const ta = t.querySelector('textarea');
+    const grow = ()=>{ ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 20)+'px'; };
+    const flush = ()=>{ clearTimeout(ta._t); persistTags(linkId); };
+    ta.addEventListener('input', ()=>{
+      const tg = findTag(linkId, tagId); if(tg) tg.note = ta.value;
+      grow(); clearTimeout(ta._t); ta._t = setTimeout(flush, 400);
+    });
+    ta.addEventListener('blur', flush);
+    t.querySelector('.tag-del').addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const ok = await showConfirm('이 태그 카드를 삭제할까요? (연결선은 그대로 남아요)');
+      if(!ok) return;
+      const l = links.get(linkId); if(!l) return;
+      l.tags = (l.tags||[]).filter(x=> x.id!==tagId);
+      persistTags(linkId);
+      updateLines();
+    });
+    requestAnimationFrame(grow);
+    return t;
+  }
+
+  function createTag(linkId, tPos){
+    const l = links.get(linkId); if(!l) return;
+    l.tags = l.tags || [];
+    // 이미 가까이에 태그가 있으면 새로 만들지 않고 그 태그를 편집
+    let tg = l.tags.find(x=> Math.abs(x.t - tPos) < 0.04);
+    if(!tg){
+      tg = {id: uid(), t: tPos, note: ''};
+      l.tags.push(tg);
+      persistTags(linkId);
+    }
+    updateLines();
+    const el = tagEls.get(linkId+':'+tg.id);
+    if(el) el.querySelector('textarea').focus();
   }
 
   /* ---------- 부드럽게 따라오는 움직임 (ease-out) ---------- */
@@ -616,8 +710,7 @@
   /* ---------- 이동 / 확대축소 ---------- */
   let isPanning=false, panStartX=0, panStartY=0, panOrigX=0, panOrigY=0;
   viewport.addEventListener('mousedown', (e)=>{
-    if(e.target.closest('.card')) return;
-    clearCardFocus();
+    if(e.target.closest('.card') || e.target.closest('.tag-card') || e.target.closest('#lines')) return;
     if(connectMode){ clearConnectSelection(); return; }
     cancelGlide();
     window.getSelection()?.removeAllRanges();   // 배경 드래그 시 카드 글자가 파랗게 선택되는 것 방지
@@ -634,7 +727,7 @@
 
   let touchState = null;
   viewport.addEventListener('touchstart', (e)=>{
-    if(e.target.closest('.card')) return;
+    if(e.target.closest('.card') || e.target.closest('.tag-card')) return;
     cancelGlide();
     if(e.touches.length===1){ touchState = {mode:'pan', x:e.touches[0].clientX, y:e.touches[0].clientY, ox:panX, oy:panY}; }
     else if(e.touches.length===2){
@@ -735,7 +828,8 @@
     return c;
   }
   viewport.addEventListener('dblclick', (e)=>{
-    if(e.target.closest('.card') || connectMode) return;
+    if(e.target.closest('.card') || e.target.closest('.tag-card') || e.target.closest('#lines') || connectMode) return;
+    if(focusCard){ showToast('연결 보기 중이에요. Esc를 눌러 끄면 새 카드를 만들 수 있어요'); return; }
     const rect = viewport.getBoundingClientRect();
     addCardAt((e.clientX - rect.left - panX)/zoom, (e.clientY - rect.top - panY)/zoom);
   });
@@ -795,7 +889,13 @@
     onSnapshot(linksCol, (snap)=>{
       snap.docChanges().forEach(ch=>{
         if(ch.type==='removed') links.delete(ch.doc.id);
-        else links.set(ch.doc.id, {id:ch.doc.id, from:ch.doc.data().from, to:ch.doc.data().to});
+        else {
+          const d = ch.doc.data();
+          // tags: [{id,t,note}] (t = 선 위 위치 0~1). 예전 방식(tag/note)은 가운데 태그 1개로 변환
+          const tags = Array.isArray(d.tags) ? d.tags.map(x=>({id:x.id, t:x.t, note:x.note||''}))
+                     : (d.tag ? [{id:'t0', t:0.5, note:d.note||''}] : []);
+          links.set(ch.doc.id, {id:ch.doc.id, from:d.from, to:d.to, tags});
+        }
       });
       applyHighlights();
     });
