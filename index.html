@@ -3,143 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>붙잡기기</title>
+<title>실타래</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg-canvas:#ffffff;
-    --dot:rgba(0,0,0,0.08);
-    --card-border:#c9bfa8;
-    --ink:#33302a;localhost:5500
-    --ink-soft:#6b6558;
-    --accent:#2e5266;
-    --accent-soft:rgba(46,82,102,0.16);
-    --date-color:#8a6e4b;
-    --danger:#a6453a;
-    --paper-line:#e4dcc8;
-    --ok:#5c8a6a;
-    --warn:#c48a3a;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-canvas);font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
-  #viewport{
-    position:fixed; inset:0; overflow:hidden; cursor:grab;
-    background-image: radial-gradient(var(--dot) 1.4px, transparent 1.4px);
-    background-size: 26px 26px;
-  }
-  #viewport.panning{cursor:grabbing;}
-  #viewport.connect-mode{cursor:crosshair;}
-  #world{ position:absolute; left:0; top:0; width:1px; height:1px; transform-origin:0 0; will-change:transform; }
-  svg#lines{ position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:5; }
-  svg#lines path.link{ pointer-events:stroke; cursor:pointer; }
-  svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !important; }
-
-  .card{
-    position:absolute; width:260px;
-    background:#ffffff;
-    border:1px solid var(--card-border);
-    border-radius:3px;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 6px 16px rgba(0,0,0,0.14);
-    z-index:10;
-    transition: box-shadow .15s ease, border-color .15s ease;
-  }
-  .card:hover{ box-shadow: 0 1px 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.2); }
-  .card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }
-  .card.dimmed{ opacity:0.28; }
-  .card.connect-mode-active .card-body{ pointer-events:none; }
-  .card.connect-mode-active .card-del{ display:none; }
-  .card.connect-mode-active{ cursor:pointer; }
-
-  .card-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 7px 12px; cursor:grab; user-select:none; border-bottom:1px solid var(--paper-line); }
-  .card-head:active{ cursor:grabbing; }
-  .drag-dots{ color:var(--ink-soft); font-size:13px; letter-spacing:1px; opacity:.6; }
-  .date-input{ font-family:'Fraunces', serif; font-size:13.5px; color:var(--date-color); border:none; background:transparent; outline:none; width:112px; cursor:text; }
-  .card-del{ margin-left:auto; border:none; background:transparent; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
-  .card-del:hover{ color:var(--danger); background:rgba(166,69,58,0.1); }
-  .card-body{ padding:10px 12px 14px; }
-
-  .card-text{ min-height:64px; outline:none; font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; color:var(--ink); word-break:break-word; }
-  .card-text:empty:before{ content: attr(data-placeholder); color:#b7ae98; }
-  .card-text.drag-over{ outline:2px dashed var(--accent); outline-offset:2px; border-radius:4px; }
-
-  .embed{ position:relative; margin:8px 0; max-width:100%; }
-  .embed img, .embed video{ max-width:100%; border-radius:4px; display:block; }
-  .embed img{ cursor:zoom-in; }
-  .embed.uploading{ min-height:56px; background:#f3f1ec; border-radius:4px; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-size:12px; }
-  .embed-rm{
-    position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.55); color:#fff;
-    border:none; width:20px; height:20px; border-radius:50%; font-size:12px; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-  }
-
-  #toolbar{
-    position:fixed; left:50%; bottom:22px; transform:translateX(-50%);
-    display:flex; align-items:center; gap:6px;
-    background:rgba(30,29,27,0.88); backdrop-filter:blur(8px);
-    border:1px solid rgba(255,255,255,0.08);
-    padding:7px 8px; border-radius:999px; z-index:50;
-    box-shadow:0 8px 30px rgba(0,0,0,0.4);
-  }
-  .tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:8px 13px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
-  .tbtn:hover{ background:rgba(255,255,255,0.09); }
-  .tbtn.active{ background:var(--accent); color:#fff; }
-  .tsep{ width:1px; height:18px; background:rgba(255,255,255,0.14); margin:0 2px; }
-  #zoomLabel{ color:#a99; font-size:12px; min-width:38px; text-align:center; }
-
-  #searchWrap{ position:fixed; top:18px; right:20px; z-index:40; }
-  #searchInput{ background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
-  #searchInput::placeholder{ color:#8b8578; }
-
-  #syncStatus{ position:fixed; top:22px; left:20px; z-index:40; display:flex; align-items:center; gap:6px; font-size:11.5px; color:#9a9486; }
-  #syncDot{ width:7px; height:7px; border-radius:50%; background:var(--warn); transition:background .3s ease; }
-  #syncDot.ok{ background:var(--ok); }
-  #syncDot.off{ background:var(--danger); }
-
-  #lightbox{ position:fixed; inset:0; background:rgba(10,10,9,0.92); z-index:200; display:none; align-items:center; justify-content:center; padding:40px; }
-  #lightbox.show{ display:flex; }
-  #lightbox img{ max-width:100%; max-height:100%; border-radius:4px; }
-  #lightbox .lb-close{ position:fixed; top:22px; right:26px; color:#eee; font-size:26px; cursor:pointer; background:rgba(255,255,255,0.08); width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-
-  #importInput{ display:none; }
-
-  #toast{ position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:#2b2924; color:#ece7db; padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; opacity:0; pointer-events:none; transition:opacity .25s ease; }
-  #toast.show{ opacity:1; }
-
-  .confirm-overlay{ position:fixed; inset:0; background:rgba(20,18,15,0.4); z-index:300; display:flex; align-items:center; justify-content:center; }
-  .confirm-box{ background:#fff; border-radius:10px; padding:20px 22px; width:280px; box-shadow:0 24px 60px rgba(0,0,0,0.3); }
-  .confirm-box p{ margin:0 0 16px; font-size:14px; line-height:1.6; color:var(--ink); }
-  .confirm-actions{ display:flex; justify-content:flex-end; gap:8px; }
-  .confirm-actions button{ border:none; padding:8px 14px; border-radius:6px; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif; }
-  .confirm-cancel{ background:#eee; color:#333; }
-  .confirm-cancel:hover{ background:#e2e2e2; }
-  .confirm-ok{ background:var(--danger); color:#fff; }
-  .confirm-ok:hover{ filter:brightness(1.08); }
-  .confirm-ok.neutral{ background:var(--accent); }
-
-  #setupWarning{ position:fixed; inset:0; z-index:500; background:#fff; display:flex; align-items:center; justify-content:center; padding:30px; }
-  #setupWarning .box{ max-width:520px; border:1px solid #ddd; border-radius:10px; padding:26px 28px; }
-  #setupWarning h1{ font-family:'Fraunces',serif; font-size:21px; margin:0 0 10px; }
-  #setupWarning p{ line-height:1.7; font-size:14px; color:#555; margin:0; }
-  #setupWarning code{ background:#f3f1ec; padding:2px 6px; border-radius:4px; font-size:12.5px; }
-
-  #btnLogout{ border:none; background:transparent; color:#b0aa9c; font-size:11.5px; font-family:'Inter',sans-serif; cursor:pointer; padding:2px 6px; border-radius:4px; margin-left:4px; }
-  #btnLogout:hover{ color:var(--danger); background:rgba(166,69,58,0.08); }
-
-  #loginScreen{ position:fixed; inset:0; z-index:400; background:#fff; display:none; align-items:center; justify-content:center; padding:24px; }
-  .login-box{ text-align:center; max-width:320px; }
-  .login-box h1{ font-family:'Fraunces',serif; font-weight:500; font-size:28px; margin:0 0 8px; }
-  .login-box p{ color:var(--ink-soft); font-size:14px; margin:0 0 22px; }
-  #btnGoogle{ border:1px solid #d6d2c8; background:#fff; color:var(--ink); font-size:14px; font-family:'Inter',sans-serif; padding:11px 22px; border-radius:999px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
-  #btnGoogle:hover{ background:#faf9f6; }
-  #loginMsg{ margin-top:14px; font-size:12.5px; color:var(--danger); min-height:18px; word-break:break-all; }
-
-  @media (max-width:640px){
-    .card{ width:220px; }
-    #searchInput{ width:120px; }
-    .tbtn{ padding:8px 10px; font-size:12px; }
-  }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -167,6 +34,7 @@
 
 <div id="lightbox"><div class="lb-close" id="lbClose">×</div><div id="lbContent"></div></div>
 <div id="toast"></div>
+<datalist id="sourceList"></datalist>
 
 <div id="loginScreen">
   <div class="login-box">
@@ -290,6 +158,28 @@
     return Array.from(d.querySelectorAll('.embed[data-path]')).map(n=>n.dataset.path);
   }
 
+  /* ---------- 출처 도우미 ---------- */
+  const normSource = (s)=> (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+  function sourceColor(s){
+    const key = normSource(s); let h = 0;
+    for(let i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i)) >>> 0;
+    return `hsl(${h % 360} 52% 68%)`;
+  }
+  let focusSource = null; // 지금 강조 중인 출처 (없으면 null)
+  function applyHighlights(){
+    document.querySelectorAll('.card').forEach(el=>{
+      const c = cards.get(el.id); if(!c) return;
+      el.classList.toggle('src-dim', !!focusSource && normSource(c.source) !== focusSource);
+    });
+  }
+  function refreshSourceList(){
+    const seen = new Map();
+    cards.forEach(c=>{ const k = normSource(c.source); if(k && !seen.has(k)) seen.set(k, c.source.trim()); });
+    document.getElementById('sourceList').innerHTML =
+      Array.from(seen.values()).map(v=> `<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+  }
+  function autoGrow(ta){ ta.style.height = 'auto'; ta.style.height = Math.max(ta.scrollHeight, 26) + 'px'; }
+
   /* ---------- 카드 렌더 ---------- */
   function renderCard(card){
     let el = document.getElementById(card.id);
@@ -298,13 +188,24 @@
       el.className = 'card';
       el.id = card.id;
       el.innerHTML = `
+        <div class="src-band" title="클릭: 같은 출처의 카드만 강조 (다시 누르면 해제)"></div>
         <div class="card-head">
           <span class="drag-dots">⠿</span>
-          <input class="date-input" type="date">
+          <button class="card-star" title="중요 표시">☆</button>
           <button class="card-del" title="삭제">×</button>
         </div>
+        <div class="card-meta">
+          <input class="meta-source" list="sourceList" placeholder="출처 (책, 논문, 영상…)" maxlength="120">
+          <input class="meta-page" placeholder="쪽수" maxlength="20">
+        </div>
+        <div class="card-quote">
+          <textarea class="quote-input" rows="1" placeholder="인용하고 싶은 문장"></textarea>
+        </div>
         <div class="card-body">
-          <div class="card-text" contenteditable="true" data-placeholder="여기에 적어보세요… 사진·영상은 붙여넣거나 끌어다놓으면 돼요"></div>
+          <div class="card-text" contenteditable="true" data-placeholder="내 생각, 의문… 사진·영상은 붙여넣거나 끌어다놓으면 돼요"></div>
+        </div>
+        <div class="card-foot">
+          <input class="date-input" type="date">
         </div>`;
       world.appendChild(el);
       wireCardEvents(el, card.id);
@@ -312,8 +213,25 @@
     }
     el.style.left = card.x+'px';
     el.style.top = card.y+'px';
+
     const dateInput = el.querySelector('.date-input');
     if(document.activeElement !== dateInput) dateInput.value = card.date || '';
+
+    const srcIn = el.querySelector('.meta-source');
+    const pageIn = el.querySelector('.meta-page');
+    const quoteIn = el.querySelector('.quote-input');
+    if(document.activeElement !== srcIn) srcIn.value = card.source || '';
+    if(document.activeElement !== pageIn) pageIn.value = card.page || '';
+    if(document.activeElement !== quoteIn) quoteIn.value = card.quote || '';
+    autoGrow(quoteIn);
+
+    const srcVal = (document.activeElement === srcIn) ? srcIn.value : (card.source || '');
+    const hasSrc = !!normSource(srcVal);
+    el.classList.toggle('has-source', hasSrc);
+    el.querySelector('.src-band').style.background = hasSrc ? sourceColor(srcVal) : '';
+    el.classList.toggle('important', !!card.important);
+    el.querySelector('.card-star').textContent = card.important ? '★' : '☆';
+
     const textDiv = el.querySelector('.card-text');
     if(document.activeElement !== textDiv && textDiv.innerHTML !== (card.html||'')){
       textDiv.innerHTML = card.html || '';
@@ -397,6 +315,55 @@
       updateDoc(doc(cardsCol, cardId), {date:c.date, updatedAt: serverTimestamp()}).catch(console.error);
     });
 
+    /* 출처 / 쪽수 / 인용 / 중요 표시 */
+    const srcIn = el.querySelector('.meta-source');
+    const pageIn = el.querySelector('.meta-page');
+    const quoteIn = el.querySelector('.quote-input');
+    const starBtn = el.querySelector('.card-star');
+    const band = el.querySelector('.src-band');
+
+    function bindField(input, key, onLocal){
+      const flush = ()=>{
+        clearTimeout(input._t);
+        const c = cards.get(cardId); if(!c) return;
+        c[key] = input.value;
+        updateDoc(doc(cardsCol, cardId), {[key]: c[key], updatedAt: serverTimestamp()}).catch(console.error);
+      };
+      input.addEventListener('input', ()=>{
+        const c = cards.get(cardId); if(c) c[key] = input.value;
+        if(onLocal) onLocal();
+        clearTimeout(input._t); input._t = setTimeout(flush, 400);
+      });
+      input.addEventListener('blur', flush);
+    }
+    bindField(srcIn, 'source', ()=>{
+      const has = !!normSource(srcIn.value);
+      el.classList.toggle('has-source', has);
+      band.style.background = has ? sourceColor(srcIn.value) : '';
+      refreshSourceList(); applyHighlights();
+    });
+    bindField(pageIn, 'page');
+    bindField(quoteIn, 'quote', ()=>{ autoGrow(quoteIn); requestAnimationFrame(updateLines); });
+
+    starBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const c = cards.get(cardId); if(!c) return;
+      c.important = !c.important;
+      el.classList.toggle('important', c.important);
+      starBtn.textContent = c.important ? '★' : '☆';
+      updateDoc(doc(cardsCol, cardId), {important:c.important, updatedAt: serverTimestamp()}).catch(console.error);
+    });
+
+    band.addEventListener('click', (e)=>{
+      if(connectMode) return;
+      e.stopPropagation();
+      const c = cards.get(cardId); if(!c) return;
+      const key = normSource(c.source);
+      focusSource = (focusSource === key) ? null : key;
+      applyHighlights();
+      showToast(focusSource ? `"${c.source.trim()}" 카드만 강조 중 (Esc로 해제)` : '강조를 껐어요');
+    });
+
     textDiv.addEventListener('input', ()=>{
       clearTimeout(textDiv._t);
       textDiv._t = setTimeout(()=> saveCardHtml(cardId, textDiv), 400);
@@ -451,7 +418,7 @@
     /* 카드 드래그 이동 */
     head.addEventListener('mousedown', (e)=>{
       if(connectMode) return;
-      if(e.target.closest('.date-input') || e.target.closest('.card-del')) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star')) return;
       e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
@@ -468,7 +435,7 @@
     });
     head.addEventListener('touchstart', (e)=>{
       if(connectMode) return;
-      if(e.target.closest('.date-input') || e.target.closest('.card-del')) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star')) return;
       const t = e.touches[0]; const startX = t.clientX, startY = t.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
       function onMove(ev){
@@ -634,7 +601,7 @@
   document.getElementById('btnReset').onclick = ()=>{
     if(cards.size===0){ panX=0; panY=0; zoom=1; applyTransform(); saveLocalView(); return; }
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); maxX=Math.max(maxX,c.x+260); maxY=Math.max(maxY,c.y+160); });
+    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); maxX=Math.max(maxX,c.x+260); maxY=Math.max(maxY,c.y+240); });
     const rect = viewport.getBoundingClientRect();
     const w = maxX-minX+120, h = maxY-minY+120;
     zoom = Math.min(1.3, Math.max(0.25, Math.min(rect.width/w, rect.height/h)));
@@ -645,10 +612,10 @@
   /* ---------- 카드 추가 ---------- */
   function addCardAt(worldX, worldY){
     const id = uid();
-    const c = {id, x: worldX-130, y: worldY-40, date: new Date().toISOString().slice(0,10), html:''};
+    const c = {id, x: worldX-130, y: worldY-40, date: new Date().toISOString().slice(0,10), html:'', source:'', page:'', quote:'', important:false};
     cards.set(id, c);
     renderCard(c);
-    setDoc(doc(cardsCol, id), {x:c.x, y:c.y, date:c.date, html:'', createdAt: serverTimestamp(), updatedAt: serverTimestamp()}).catch(console.error);
+    setDoc(doc(cardsCol, id), {x:c.x, y:c.y, date:c.date, html:'', source:'', page:'', quote:'', important:false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()}).catch(console.error);
     document.getElementById(id).querySelector('.card-text').focus();
     return c;
   }
@@ -678,7 +645,8 @@
     document.querySelectorAll('.card').forEach(el=>{
       const c = cards.get(el.id); if(!c) return;
       if(!q){ el.classList.remove('dimmed'); return; }
-      const hit = plainText(c.html).toLowerCase().includes(q) || (c.date||'').includes(q);
+      const hay = [plainText(c.html), c.source, c.page, c.quote, c.date].join(' ').toLowerCase();
+      const hit = hay.includes(q);
       el.classList.toggle('dimmed', !hit);
     });
   });
@@ -701,7 +669,7 @@
       reader.onload = async ()=>{
         try{
           const data = JSON.parse(reader.result);
-          for(const c of data.cards||[]) await setDoc(doc(cardsCol, c.id), {x:c.x,y:c.y,date:c.date||'',html:c.html||'',updatedAt:serverTimestamp()});
+          for(const c of data.cards||[]) await setDoc(doc(cardsCol, c.id), {x:c.x,y:c.y,date:c.date||'',html:c.html||'',source:c.source||'',page:c.page||'',quote:c.quote||'',important:!!c.important,updatedAt:serverTimestamp()});
           for(const l of data.links||[]) await setDoc(doc(linksCol, l.id), {from:l.from,to:l.to});
           showToast('불러왔어요');
         }catch(err){ await showAlert('백업 파일을 읽지 못했어요: '+err.message); }
@@ -711,6 +679,7 @@
   });
 
   window.addEventListener('resize', updateLines);
+  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && focusSource){ focusSource=null; applyHighlights(); showToast('강조를 껐어요'); } });
 
   /* ---------- 실시간 동기화 ---------- */
   window.__journalReady = function(){
@@ -725,10 +694,11 @@
           const el = document.getElementById(id); if(el) el.remove();
         } else {
           const d = ch.doc.data();
-          const c = {id, x:d.x||0, y:d.y||0, date:d.date||'', html:d.html||''};
+          const c = {id, x:d.x||0, y:d.y||0, date:d.date||'', html:d.html||'', source:d.source||'', page:d.page||'', quote:d.quote||'', important:!!d.important};
           cards.set(id, c); renderCard(c);
         }
       });
+      refreshSourceList(); applyHighlights();
       updateLines();
       if(!ready && !snap.metadata.fromCache){
         ready = true;
