@@ -27,6 +27,7 @@
   <span id="zoomLabel">100%</span>
   <button class="tbtn" id="btnZoomIn">＋</button>
   <button class="tbtn" id="btnReset">화면 정렬</button>
+  <button class="tbtn" id="btnShuffle">🔀 섞기</button>
   <div class="tsep"></div>
   <button class="tbtn" id="btnExport">⤓ 백업</button>
   <button class="tbtn" id="btnImport">⤒ 불러오기</button>
@@ -65,7 +66,7 @@
   }
 
   const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js");
-  const { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence, serverTimestamp } =
+  const { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence, serverTimestamp, writeBatch } =
     await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js");
   const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } =
     await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js");
@@ -166,12 +167,27 @@
     return `hsl(${h % 360} 52% 68%)`;
   }
   let focusSource = null; // 지금 강조 중인 출처 (없으면 null)
+  let focusCard = null;   // 카드 상단을 더블클릭해서 강조 중인 카드 (없으면 null)
+  const LINE_COLOR = '#e0556b'; // 연결선 색 — 여기만 바꾸면 선과 끝점 색이 함께 바뀌어요
+  function linkedSet(){
+    const s = new Set();
+    if(!focusCard) return s;
+    s.add(focusCard);
+    links.forEach(l=>{ if(l.from===focusCard) s.add(l.to); if(l.to===focusCard) s.add(l.from); });
+    return s;
+  }
   function applyHighlights(){
+    if(focusCard && !cards.has(focusCard)) focusCard = null;
+    const linked = linkedSet();
     document.querySelectorAll('.card').forEach(el=>{
       const c = cards.get(el.id); if(!c) return;
-      el.classList.toggle('src-dim', !!focusSource && normSource(c.source) !== focusSource);
+      const dimBySrc = !!focusSource && normSource(c.source) !== focusSource;
+      const dimByLink = !!focusCard && !linked.has(el.id);
+      el.classList.toggle('src-dim', dimBySrc || dimByLink);
     });
+    updateLines();
   }
+  function clearCardFocus(){ if(focusCard){ focusCard = null; applyHighlights(); } }
   function refreshSourceList(){
     const seen = new Map();
     cards.forEach(c=>{ const k = normSource(c.source); if(k && !seen.has(k)) seen.set(k, c.source.trim()); });
@@ -197,13 +213,13 @@
         </div>
         <div class="card-meta">
           <input class="meta-source" list="sourceList" placeholder="출처 (책, 논문, 영상…)" maxlength="120">
-          <input class="meta-page" placeholder="쪽수" maxlength="20">
+          <input class="meta-page" placeholder="p" maxlength="20">
         </div>
         <div class="card-quote">
           <textarea class="quote-input" rows="1" placeholder="인용하고 싶은 문장"></textarea>
         </div>
         <div class="card-body">
-          <div class="card-text" contenteditable="true" data-placeholder="내 생각, 의문… 사진·영상은 붙여넣거나 끌어다놓으면 돼요"></div>
+          <div class="card-text" contenteditable="true" data-placeholder=""></div>
         </div>
         <div class="card-foot">
           <input class="date-input" type="date">
@@ -431,6 +447,19 @@
       if(ok) deleteCard(cardId);
     });
 
+    /* 카드 상단 더블클릭: 이 카드와 선으로 연결된 카드만 강조 (다시 더블클릭하면 해제) */
+    head.addEventListener('dblclick', (e)=>{
+      if(connectMode) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star') || e.target.closest('.card-quote-btn')) return;
+      e.stopPropagation();
+      focusCard = (focusCard === cardId) ? null : cardId;
+      applyHighlights();
+      if(focusCard){
+        const n = linkedSet().size - 1;
+        showToast(n>0 ? `연결된 카드 ${n}개만 강조 중 (Esc로 해제)` : '이 카드는 연결된 카드가 없어요');
+      } else showToast('강조를 껐어요');
+    });
+
     /* 카드 드래그 이동 */
     head.addEventListener('mousedown', (e)=>{
       if(connectMode) return;
@@ -439,13 +468,13 @@
       const startX = e.clientX, startY = e.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
       el.style.zIndex = 999;
+      const drag = makeDragger(cardId, el);
       function onMove(ev){
-        c.x = ox + (ev.clientX - startX)/zoom; c.y = oy + (ev.clientY - startY)/zoom;
-        el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines();
+        drag.to(ox + (ev.clientX - startX)/zoom, oy + (ev.clientY - startY)/zoom);
       }
       function onUp(){
         document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
-        updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+        drag.end();
       }
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     });
@@ -454,14 +483,15 @@
       if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star')) return;
       const t = e.touches[0]; const startX = t.clientX, startY = t.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
+      const drag = makeDragger(cardId, el);
       function onMove(ev){
         const tt = ev.touches[0];
-        c.x = ox + (tt.clientX - startX)/zoom; c.y = oy + (tt.clientY - startY)/zoom;
-        el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines(); ev.preventDefault();
+        drag.to(ox + (tt.clientX - startX)/zoom, oy + (tt.clientY - startY)/zoom);
+        ev.preventDefault();
       }
       function onEnd(){
         document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd);
-        updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+        drag.end();
       }
       document.addEventListener('touchmove', onMove, {passive:false}); document.addEventListener('touchend', onEnd);
     }, {passive:true});
@@ -528,11 +558,13 @@
       const path = document.createElementNS('http://www.w3.org/2000/svg','path');
       path.setAttribute('d', `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`);
       path.setAttribute('class','link');
-      path.setAttribute('stroke', '#2e5266');
-      path.setAttribute('stroke-width', '1.6');
+      const mine = !focusCard || l.from===focusCard || l.to===focusCard;
+      const lineOpacity = !focusCard ? 0.3 : (mine ? 0.85 : 0.08);
+      path.setAttribute('stroke', LINE_COLOR);
+      path.setAttribute('stroke-width', (focusCard && mine) ? '2.2' : '1.6');
       path.setAttribute('stroke-dasharray', '5 5');
       path.setAttribute('fill', 'none');
-      path.setAttribute('opacity', '0.3');
+      path.setAttribute('opacity', lineOpacity);
       path.addEventListener('click', async ()=>{
         const ok = await showConfirm('이 연결선을 삭제할까요?');
         if(ok) deleteDoc(doc(linksCol, l.id)).catch(console.error);
@@ -542,32 +574,80 @@
       [[x1,y1],[x2,y2]].forEach(([px,py])=>{
         const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
         dot.setAttribute('cx',px); dot.setAttribute('cy',py); dot.setAttribute('r','3');
-        dot.setAttribute('fill','#2e5266'); dot.setAttribute('opacity','0.4');
+        dot.setAttribute('fill', LINE_COLOR); dot.setAttribute('opacity', lineOpacity);
         svg.appendChild(dot);
       });
     });
+  }
+
+  /* ---------- 부드럽게 따라오는 움직임 (ease-out) ---------- */
+  const EASE = 0.25;   // 작을수록 더 느긋하게 따라와요 (0.08 ~ 0.25 사이로 조절)
+  const easeK = (dt)=> 1 - Math.pow(1-EASE, Math.min(50, dt)/16.67);
+
+  // 화면(캔버스) 드래그
+  let panTX = 0, panTY = 0, glideRaf = 0, glideLast = 0;
+  function cancelGlide(){ if(glideRaf){ cancelAnimationFrame(glideRaf); glideRaf = 0; } }
+  function glideTo(tx, ty){
+    panTX = tx; panTY = ty;
+    if(!glideRaf){ glideLast = performance.now(); glideRaf = requestAnimationFrame(glideStep); }
+  }
+  function glideStep(now){
+    const k = easeK(now - glideLast); glideLast = now;
+    panX += (panTX - panX)*k; panY += (panTY - panY)*k;
+    if(Math.abs(panTX-panX) < 0.3 && Math.abs(panTY-panY) < 0.3){
+      panX = panTX; panY = panTY; applyTransform(); glideRaf = 0; saveLocalView(); return;
+    }
+    applyTransform();
+    glideRaf = requestAnimationFrame(glideStep);
+  }
+
+  // 카드 드래그: 손을 떼도 목표 위치까지 스르륵 따라간 뒤 저장
+  function makeDragger(cardId, el){
+    const c = cards.get(cardId);
+    let tx = c.x, ty = c.y, raf = 0, last = 0, down = true;
+    const apply = ()=>{ el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines(); };
+    const finish = ()=>{
+      resolveOverlap(cardId);
+      updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+    };
+    function step(now){
+      const k = easeK(now - last); last = now;
+      c.x += (tx - c.x)*k; c.y += (ty - c.y)*k;
+      if(Math.abs(tx-c.x) < 0.3 && Math.abs(ty-c.y) < 0.3){
+        c.x = tx; c.y = ty; apply(); raf = 0;
+        if(!down) finish();
+        return;
+      }
+      apply(); raf = requestAnimationFrame(step);
+    }
+    return {
+      to(x, y){ tx = x; ty = y; if(!raf){ last = performance.now(); raf = requestAnimationFrame(step); } },
+      end(){ down = false; if(!raf) finish(); }
+    };
   }
 
   /* ---------- 이동 / 확대축소 ---------- */
   let isPanning=false, panStartX=0, panStartY=0, panOrigX=0, panOrigY=0;
   viewport.addEventListener('mousedown', (e)=>{
     if(e.target.closest('.card')) return;
+    clearCardFocus();
     if(connectMode){ clearConnectSelection(); return; }
+    cancelGlide();
     isPanning = true; viewport.classList.add('panning');
     panStartX = e.clientX; panStartY = e.clientY; panOrigX = panX; panOrigY = panY;
   });
   window.addEventListener('mousemove', (e)=>{
     if(!isPanning) return;
-    panX = panOrigX + (e.clientX - panStartX); panY = panOrigY + (e.clientY - panStartY);
-    applyTransform();
+    glideTo(panOrigX + (e.clientX - panStartX), panOrigY + (e.clientY - panStartY));
   });
   window.addEventListener('mouseup', ()=>{
-    if(isPanning){ isPanning=false; viewport.classList.remove('panning'); saveLocalView(); }
+    if(isPanning){ isPanning=false; viewport.classList.remove('panning'); }
   });
 
   let touchState = null;
   viewport.addEventListener('touchstart', (e)=>{
     if(e.target.closest('.card')) return;
+    cancelGlide();
     if(e.touches.length===1){ touchState = {mode:'pan', x:e.touches[0].clientX, y:e.touches[0].clientY, ox:panX, oy:panY}; }
     else if(e.touches.length===2){
       const [t1,t2]=e.touches;
@@ -578,9 +658,7 @@
   viewport.addEventListener('touchmove', (e)=>{
     if(!touchState) return;
     if(touchState.mode==='pan' && e.touches.length===1){
-      panX = touchState.ox + (e.touches[0].clientX - touchState.x);
-      panY = touchState.oy + (e.touches[0].clientY - touchState.y);
-      applyTransform();
+      glideTo(touchState.ox + (e.touches[0].clientX - touchState.x), touchState.oy + (e.touches[0].clientY - touchState.y));
     } else if(touchState.mode==='pinch' && e.touches.length===2){
       const [t1,t2]=e.touches;
       const d = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
@@ -590,11 +668,11 @@
       applyTransform();
     }
   }, {passive:true});
-  viewport.addEventListener('touchend', ()=>{ touchState=null; saveLocalView(); });
+  viewport.addEventListener('touchend', ()=>{ touchState=null; if(!glideRaf) saveLocalView(); });
 
   let wheelSaveTimer;
   viewport.addEventListener('wheel', (e)=>{
-    e.preventDefault();
+    e.preventDefault(); cancelGlide();
     const rect = viewport.getBoundingClientRect();
     const mx = e.clientX-rect.left, my = e.clientY-rect.top;
     const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
@@ -605,6 +683,7 @@
   }, {passive:false});
 
   function zoomAtCenter(factor){
+    cancelGlide();
     const rect = viewport.getBoundingClientRect();
     const mx = rect.width/2, my = rect.height/2;
     const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
@@ -615,14 +694,118 @@
   document.getElementById('btnZoomIn').onclick = ()=> zoomAtCenter(1.2);
   document.getElementById('btnZoomOut').onclick = ()=> zoomAtCenter(1/1.2);
   document.getElementById('btnReset').onclick = ()=>{
+    cancelGlide();
     if(cards.size===0){ panX=0; panY=0; zoom=1; applyTransform(); saveLocalView(); return; }
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); maxX=Math.max(maxX,c.x+260); maxY=Math.max(maxY,c.y+240); });
+    cards.forEach(c=>{ minX=Math.min(minX,c.x); minY=Math.min(minY,c.y); const r=rectOf(c); maxX=Math.max(maxX,c.x+r.w); maxY=Math.max(maxY,c.y+r.h); });
     const rect = viewport.getBoundingClientRect();
     const w = maxX-minX+120, h = maxY-minY+120;
     zoom = Math.min(1.3, Math.max(0.25, Math.min(rect.width/w, rect.height/h)));
     panX = rect.width/2 - (minX+maxX)/2*zoom; panY = rect.height/2 - (minY+maxY)/2*zoom;
     applyTransform(); saveLocalView();
+  };
+
+  /* ---------- 카드끼리 겹치지 않게: 겹치면 가장 가까운 빈자리로 틩~ 밀어냄 ---------- */
+  const OVERLAP_GAP = 16; // 카드 사이 최소 간격(px)
+  function rectOf(c){
+    const e = document.getElementById(c.id);
+    return {x:c.x, y:c.y, w:e?e.offsetWidth:260, h:e?e.offsetHeight:200};
+  }
+  function rectsHit(a, b){
+    return a.x < b.x+b.w+OVERLAP_GAP && a.x+a.w+OVERLAP_GAP > b.x &&
+           a.y < b.y+b.h+OVERLAP_GAP && a.y+a.h+OVERLAP_GAP > b.y;
+  }
+  function resolveOverlap(cardId){
+    const c = cards.get(cardId); if(!c) return false;
+    const me = rectOf(c);
+    const others = [];
+    cards.forEach(o=>{ if(o.id!==cardId) others.push(rectOf(o)); });
+    const isFree = (x,y)=> !others.some(o=> rectsHit({x,y,w:me.w,h:me.h}, o));
+    if(isFree(me.x, me.y)) return false;
+
+    // 근처 카드들만 후보 계산에 사용
+    const near = others.filter(o=> rectsHit({x:me.x-600, y:me.y-600, w:me.w+1200, h:me.h+1200}, o));
+    const xs = [me.x], ys = [me.y];
+    near.forEach(o=>{
+      xs.push(o.x+o.w+OVERLAP_GAP, o.x-me.w-OVERLAP_GAP);
+      ys.push(o.y+o.h+OVERLAP_GAP, o.y-me.h-OVERLAP_GAP);
+    });
+    let best = null, bestD = Infinity;
+    for(const x of xs) for(const y of ys){
+      const d = Math.hypot(x-me.x, y-me.y);
+      if(d < bestD && isFree(x,y)){ best = {x,y}; bestD = d; }
+    }
+    if(!best) return false;
+
+    const el = document.getElementById(cardId);
+    c.x = best.x; c.y = best.y;
+    if(el){
+      el.classList.add('settling');
+      el.style.left = c.x+'px'; el.style.top = c.y+'px';
+      setTimeout(()=> el.classList.remove('settling'), 350);
+    }
+    const t0 = performance.now();
+    (function tick(){ updateLines(); if(performance.now()-t0 < 380) requestAnimationFrame(tick); })();
+    return true;
+  }
+
+  /* ---------- 카드 섞기 ---------- */
+  document.getElementById('btnShuffle').onclick = async ()=>{
+    if(cards.size < 2) return;
+    const ok = await showConfirm('모든 카드를 무작위 위치에 흩뿌릴까요? 겹치지는 않아요. 지금 배치는 되돌릴 수 없어요. (먼저 ⤓ 백업을 해두면 안전해요)', {okText:'섞기', okClass:'confirm-ok neutral'});
+    if(!ok) return;
+
+    const list = Array.from(cards.values());
+
+    // 전체 카드가 차지하는 넓이의 약 4배 되는 가로로 넓은 영역에 무작위로 흩뿌림 (겹치면 다시 뽑기)
+    const sizes = new Map(list.map(c=> [c.id, rectOf(c)]));
+    let area = 0; sizes.forEach(r=> { area += (r.w+OVERLAP_GAP)*(r.h+OVERLAP_GAP); });
+    let W = Math.sqrt(area*4*1.6), H = W/1.6;
+    let minX = Infinity, minY = Infinity;
+    list.forEach(c=>{ minX = Math.min(minX, c.x); minY = Math.min(minY, c.y); });
+
+    let placed;
+    for(let attempt=0; attempt<8; attempt++){
+      placed = [];
+      let failed = false;
+      // 큰 카드부터 놓아야 자리가 잘 나와요 (위치는 전부 무작위)
+      const order = list.slice().sort((p,q)=> sizes.get(q.id).h - sizes.get(p.id).h);
+      for(const c of order){
+        const r = sizes.get(c.id);
+        let spot = null;
+        for(let t=0; t<400 && !spot; t++){
+          const x = minX + Math.random()*Math.max(1, W - r.w);
+          const y = minY + Math.random()*Math.max(1, H - r.h);
+          if(!placed.some(p=> rectsHit({x,y,w:r.w,h:r.h}, p))) spot = {x,y,w:r.w,h:r.h};
+        }
+        if(!spot){ failed = true; break; }
+        spot.id = c.id; placed.push(spot);
+      }
+      if(!failed) break;
+      W *= 1.2; H *= 1.2; placed = null;   // 자리가 모자라면 영역을 넓혀서 다시
+    }
+    if(!placed){ showAlert('섞기에 실패했어요. 다시 한 번 눌러주세요.'); return; }
+
+    placed.forEach(p=>{
+      const c = cards.get(p.id);
+      c.x = Math.round(p.x); c.y = Math.round(p.y);
+      const el = document.getElementById(c.id);
+      if(el){
+        el.classList.add('settling');
+        el.style.left = c.x+'px'; el.style.top = c.y+'px';
+        setTimeout(()=> el.classList.remove('settling'), 350);
+      }
+    });
+    const t0 = performance.now();
+    (function tick(){ updateLines(); if(performance.now()-t0 < 380) requestAnimationFrame(tick); })();
+
+    for(let i=0; i<list.length; i+=400){            // Firestore에 저장 (400개씩)
+      const batch = writeBatch(db);
+      list.slice(i, i+400).forEach(c=> batch.update(doc(cardsCol, c.id), {x:c.x, y:c.y, updatedAt: serverTimestamp()}));
+      await batch.commit().catch(console.error);
+    }
+    document.getElementById('btnReset').click();
+    showToast('카드를 섞었어요');
   };
 
   /* ---------- 카드 추가 ---------- */
@@ -631,6 +814,7 @@
     const c = {id, x: worldX-130, y: worldY-40, date: new Date().toISOString().slice(0,10), html:'', source:'', page:'', quote:'', important:false};
     cards.set(id, c);
     renderCard(c);
+    resolveOverlap(id);
     setDoc(doc(cardsCol, id), {x:c.x, y:c.y, date:c.date, html:'', source:'', page:'', quote:'', important:false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()}).catch(console.error);
     document.getElementById(id).querySelector('.card-text').focus();
     return c;
@@ -695,7 +879,7 @@
   });
 
   window.addEventListener('resize', updateLines);
-  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && focusSource){ focusSource=null; applyHighlights(); showToast('강조를 껐어요'); } });
+  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && (focusSource || focusCard)){ focusSource=null; focusCard=null; applyHighlights(); showToast('강조를 껐어요'); } });
 
   /* ---------- 실시간 동기화 ---------- */
   window.__journalReady = function(){
@@ -730,7 +914,7 @@
         if(ch.type==='removed') links.delete(ch.doc.id);
         else links.set(ch.doc.id, {id:ch.doc.id, from:ch.doc.data().from, to:ch.doc.data().to});
       });
-      updateLines();
+      applyHighlights();
     });
   };
 

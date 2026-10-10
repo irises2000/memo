@@ -1,16 +1,16 @@
 :root{
-  --bg-canvas:#e8e8e8;
+  --bg-canvas:#000000;
   --dot:rgba(0,0,0,0.08);
-  --card-border:#c9bfa8;
+  --card-border:#ababab;
   --ink:#313131;
   --ink-soft:#6c6c6c;
-  --accent:#2e5266;
+  --accent:#652e66;
   --accent-soft:rgba(46,82,102,0.16);
   --date-color:#9a9a9a;
   --danger:#a6453a;
-  --paper-line:#e4dcc8;
+  --paper-line:#e2e2e2;
   --ok:#5c8a6a;
-  --warn:#c48a3a;
+  --warn:#ff2a2a;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-canvas);font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
@@ -27,7 +27,7 @@ svg#lines path.link{ pointer-events:stroke; cursor:pointer; }
 svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !important; }
 
 .card{
-  position:absolute; width:260px;
+  position:absolute; width:400px;
   background:#ffffff;
   /* border:1px solid var(--card-border); */
   border-radius:16px;
@@ -35,6 +35,7 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
   z-index:10;
   transition: box-shadow .15s ease, border-color .15s ease;
 }
+.card.settling{ transition: left .3s cubic-bezier(.2,.9,.3,1.15), top .3s cubic-bezier(.2,.9,.3,1.15), box-shadow .15s ease; }
 .card:hover{ box-shadow: 0 0 0 rgba(0,0,0,0.25), 0 10px 24px rgba(0,0,0,0.2); }
 .card.selected-endpoint{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft), 0 10px 24px rgba(0,0,0,0.25); }
 .card.dimmed, .card.src-dim{ opacity:0.28; }
@@ -75,7 +76,7 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .card.has-quote .card-quote{ display:block; }
 .quote-input{
   display:block; width:100%; resize:none; overflow:hidden; min-height:26px;
-  border:none; outline:none; background:#f6f3ea; border-left:3px solid #b9ae92; border-radius:3px 8px 8px 3px;
+  border:none; outline:none; background:#eeeeee; border-left:3px solid #b8b8b8; border-radius:3px 8px 8px 3px;
   padding:7px 10px; font-family:'Fraunces','Inter',serif; font-size:13.5px; line-height:1.6; color:#4a463d;
 }
 .quote-input::placeholder{ color:#bdb6a3; font-family:'Inter',sans-serif; font-size:12.5px; }
