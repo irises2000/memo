@@ -191,6 +191,7 @@
         <div class="src-band" title="클릭: 같은 출처의 카드만 강조 (다시 누르면 해제)"></div>
         <div class="card-head">
           <span class="drag-dots">⠿</span>
+          <button class="card-quote-btn" title="인용문 추가/숨기기">❝</button>
           <button class="card-star" title="중요 표시">☆</button>
           <button class="card-del" title="삭제">×</button>
         </div>
@@ -223,6 +224,7 @@
     if(document.activeElement !== srcIn) srcIn.value = card.source || '';
     if(document.activeElement !== pageIn) pageIn.value = card.page || '';
     if(document.activeElement !== quoteIn) quoteIn.value = card.quote || '';
+    if(quoteIn.value) el.classList.add('has-quote');
     autoGrow(quoteIn);
 
     const srcVal = (document.activeElement === srcIn) ? srcIn.value : (card.source || '');
@@ -344,6 +346,20 @@
     });
     bindField(pageIn, 'page');
     bindField(quoteIn, 'quote', ()=>{ autoGrow(quoteIn); requestAnimationFrame(updateLines); });
+
+    const quoteBtn = el.querySelector('.card-quote-btn');
+    quoteBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(el.classList.contains('has-quote') && !quoteIn.value.trim()){
+        el.classList.remove('has-quote');
+      } else if(!el.classList.contains('has-quote')){
+        el.classList.add('has-quote'); autoGrow(quoteIn); quoteIn.focus();
+      } else { quoteIn.focus(); }
+      requestAnimationFrame(updateLines);
+    });
+    quoteIn.addEventListener('blur', ()=>{
+      if(!quoteIn.value.trim()){ el.classList.remove('has-quote'); requestAnimationFrame(updateLines); }
+    });
 
     starBtn.addEventListener('click', (e)=>{
       e.stopPropagation();

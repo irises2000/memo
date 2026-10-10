@@ -46,17 +46,17 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .card.connect-mode-active .card-star{ display:none; }
 .card.connect-mode-active{ cursor:pointer; }
 
-/* 출처 색 띠: 같은 출처는 같은 색. 누르면 같은 출처 카드만 강조 */
-.src-band{ height:9px; border-radius:15px 15px 0 0; cursor:pointer; display:none; }
-.card.has-source .src-band{ display:block; }
-.card.connect-mode-active .src-band{ pointer-events:none; }
-.src-band:hover{ filter:brightness(0.92); }
+/* 출처 색 띠: 사용 안 함 (숨김) */
+.src-band{ display:none !important; }
 
 .card-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 7px 12px; cursor:grab; user-select:none; }
 .card-head:active{ cursor:grabbing; }
 .drag-dots{ color:var(--ink-soft); font-size:13px; letter-spacing:1px; opacity:.6; }
 .date-input{ font-family:'Fraunces', serif; font-size:13.5px; color:var(--date-color); border:none; background:transparent; outline:none; width:112px; cursor:text; text-align:right; }
-.card-star{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
+.card-star{ margin-left:0; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
+.card-quote-btn{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; font-family:'Fraunces',serif; }
+.card-quote-btn:hover, .card.has-quote .card-quote-btn{ color:var(--ink-soft); background:rgba(0,0,0,0.06); }
+.card.connect-mode-active .card-quote-btn{ display:none; }
 .card-star:hover{ color:#7ed321; background:rgba(126,211,33,0.12); }
 .card.important .card-star{ color:#7ed321; }
 .card-del{ border:none; background:transparent; color:var(--ink-soft); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }
@@ -71,7 +71,8 @@ svg#lines path.link:hover{ stroke:var(--danger) !important; opacity:0.7 !importa
 .meta-source:hover, .meta-page:hover, .meta-source:focus, .meta-page:focus{ border-bottom-color:var(--paper-line); }
 .meta-source::placeholder, .meta-page::placeholder{ color:#bdb6a3; font-weight:400; }
 
-.card-quote{ padding:0 12px 4px; }
+.card-quote{ display:none; padding:0 12px 4px; }
+.card.has-quote .card-quote{ display:block; }
 .quote-input{
   display:block; width:100%; resize:none; overflow:hidden; min-height:26px;
   border:none; outline:none; background:#f6f3ea; border-left:3px solid #b9ae92; border-radius:3px 8px 8px 3px;
