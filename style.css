@@ -68,7 +68,7 @@ svg#lines circle.link-dot.is-dim{ opacity:0.08; }
 
 /* ========== 5. 카드 본체 ========== */
 .card{
-  position:absolute; width:260px;                 /* ← 카드 가로 폭 */
+  position:absolute; width:600px;                 /* ← 카드 가로 폭 */
   background:#ffffff;
   /* border:1px solid var(--card-border); */
   border-radius:16px;                             /* ← 모서리 둥글기 */
