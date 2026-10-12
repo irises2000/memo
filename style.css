@@ -68,7 +68,7 @@ svg#lines circle.link-dot.is-dim{ opacity:0.08; }
 
 /* ========== 5. 카드 본체 ========== */
 .card{
-  position:absolute; width:500px;                 /* ← 카드 가로 폭 */
+  position:absolute; width:260px;                 /* ← 카드 가로 폭 */
   background:#ffffff;
   /* border:1px solid var(--card-border); */
   border-radius:16px;                             /* ← 모서리 둥글기 */
@@ -91,7 +91,8 @@ svg#lines circle.link-dot.is-dim{ opacity:0.08; }
 .card.connect-mode-active .card-foot{ pointer-events:none; }
 .card.connect-mode-active .card-del,
 .card.connect-mode-active .card-star,
-.card.connect-mode-active .card-quote-btn{ display:none; }
+.card.connect-mode-active .card-quote-btn,
+.card.connect-mode-active .card-src-btn{ display:none; }
 
 /* 출처 색 띠: 사용 안 함 (숨김) */
 .src-band{ display:none !important; }
@@ -102,7 +103,9 @@ svg#lines circle.link-dot.is-dim{ opacity:0.08; }
 .card-head:active{ cursor:grabbing; }
 .drag-dots{ color:var(--ink-soft); font-size:13px; letter-spacing:1px; opacity:.6; }
 
-.card-quote-btn{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; font-family:'Fraunces',serif; }  /* ❝ 인용문 열기 */
+.card-src-btn{ margin-left:auto; border:none; background:transparent; color:#c4bfae; font-size:14px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; filter:grayscale(1); opacity:.7; }  /* 📖 출처 열기 */
+.card-src-btn:hover, .card.has-meta .card-src-btn{ background:rgba(0,0,0,0.06); opacity:1; }
+.card-quote-btn{ margin-left:0; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 5px; border-radius:3px; font-family:'Fraunces',serif; }  /* ❝ 인용문 열기 */
 .card-quote-btn:hover, .card.has-quote .card-quote-btn{ color:var(--ink-soft); background:rgba(0,0,0,0.06); }
 
 .card-star{ margin-left:0; border:none; background:transparent; color:#c4bfae; font-size:15px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:3px; }  /* ★ 중요 표시 */
@@ -114,7 +117,8 @@ svg#lines circle.link-dot.is-dim{ opacity:0.08; }
 
 
 /* ========== 7. 출처 / 쪽수 ========== */
-.card-meta{ display:flex; gap:6px; padding:0 12px 6px; }
+.card-meta{ display:none; gap:6px; padding:0 12px 6px; }
+.card.has-meta .card-meta{ display:flex; }   /* 출처/쪽수는 적혀 있거나 📖로 열었을 때만 보임 */
 .meta-source, .meta-page{
   border:none; outline:none; background:transparent; font-family:'Inter',sans-serif;
   font-size:12px; color:var(--ink-soft); padding:3px 0; border-bottom:1px solid transparent;
@@ -164,7 +168,7 @@ svg#lines circle.tag-pin{ fill:var(--tag-pin); stroke:#fff; stroke-width:1.5; } 
 svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
 
 .tag-card{
-  position:absolute; pointer-events:auto; width:100px; transform:translate(-50%,-100%);
+  position:absolute; pointer-events:auto; width:150px; transform:translate(-50%,-100%);
   background:var(--tag-bg); border-radius:12px; padding:7px 10px 8px;
   box-shadow:0 4px 14px rgba(255,60,140,0.3); transition:opacity .15s ease;
 }
@@ -257,4 +261,3 @@ svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
   #searchInput{ width:120px; }
   .tbtn{ padding:8px 10px; font-size:12px; }
 }
-
