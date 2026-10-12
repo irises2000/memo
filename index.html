@@ -201,6 +201,7 @@
         <div class="src-band" title="클릭: 같은 출처의 카드만 강조 (다시 누르면 해제)"></div>
         <div class="card-head">
           <span class="drag-dots">⠿</span>
+          <button class="card-src-btn" title="출처 추가/숨기기">📖</button>
           <button class="card-quote-btn" title="인용문 추가/숨기기">❝</button>
           <button class="card-star" title="중요 표시">☆</button>
           <button class="card-del" title="삭제">×</button>
@@ -235,6 +236,7 @@
     if(document.activeElement !== pageIn) pageIn.value = card.page || '';
     if(document.activeElement !== quoteIn) quoteIn.value = card.quote || '';
     if(quoteIn.value) el.classList.add('has-quote');
+    if(srcIn.value || pageIn.value) el.classList.add('has-meta');   // 출처/쪽수가 적혀 있으면 보이기
     autoGrow(quoteIn);
 
     const srcVal = (document.activeElement === srcIn) ? srcIn.value : (card.source || '');
@@ -357,6 +359,26 @@
     bindField(pageIn, 'page');
     bindField(quoteIn, 'quote', ()=>{ autoGrow(quoteIn); requestAnimationFrame(updateLines); });
 
+    /* 📖 출처 버튼: 눌러서 출처/쪽수 칸을 열고 닫기 (비어 있으면 카드에 안 보임) */
+    const srcBtn = el.querySelector('.card-src-btn');
+    srcBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const isOpen = el.classList.contains('has-meta');
+      if(isOpen && !srcIn.value.trim() && !pageIn.value.trim()){
+        el.classList.remove('has-meta');
+      } else if(!isOpen){
+        el.classList.add('has-meta'); srcIn.focus();
+      } else { srcIn.focus(); }
+      requestAnimationFrame(updateLines);
+    });
+    const hideMetaIfEmpty = ()=> setTimeout(()=>{
+      const a = document.activeElement;
+      if(a === srcIn || a === pageIn) return;   // 출처 ↔ 쪽수 칸 사이 이동 중이면 그대로
+      if(!srcIn.value.trim() && !pageIn.value.trim()){ el.classList.remove('has-meta'); requestAnimationFrame(updateLines); }
+    }, 0);
+    srcIn.addEventListener('blur', hideMetaIfEmpty);
+    pageIn.addEventListener('blur', hideMetaIfEmpty);
+
     const quoteBtn = el.querySelector('.card-quote-btn');
     quoteBtn.addEventListener('click', (e)=>{
       e.stopPropagation();
@@ -444,7 +466,7 @@
     /* 카드 상단 더블클릭: 이 카드와 선으로 연결된 카드만 강조 (다시 더블클릭하면 해제) */
     head.addEventListener('dblclick', (e)=>{
       if(connectMode) return;
-      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star') || e.target.closest('.card-quote-btn')) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star') || e.target.closest('.card-quote-btn') || e.target.closest('.card-src-btn')) return;
       e.stopPropagation();
       focusCard = (focusCard === cardId) ? null : cardId;
       applyHighlights();
@@ -457,7 +479,7 @@
     /* 카드 드래그 이동 */
     head.addEventListener('mousedown', (e)=>{
       if(connectMode) return;
-      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star')) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star') || e.target.closest('.card-quote-btn') || e.target.closest('.card-src-btn')) return;
       e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
@@ -474,7 +496,7 @@
     });
     head.addEventListener('touchstart', (e)=>{
       if(connectMode) return;
-      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star')) return;
+      if(e.target.closest('.date-input') || e.target.closest('.card-del') || e.target.closest('.card-star') || e.target.closest('.card-quote-btn') || e.target.closest('.card-src-btn')) return;
       const t = e.touches[0]; const startX = t.clientX, startY = t.clientY;
       const c = cards.get(cardId); const ox = c.x, oy = c.y;
       const drag = makeDragger(cardId, el);
