@@ -111,6 +111,7 @@
   /* ---------- 상태 ---------- */
   let cards = new Map();  // id -> {id,x,y,date,html}
   let links = new Map();  // id -> {id,from,to}
+  let images = new Map(); // 배경에 그냥 올린 이미지: id -> {id,x,y,w,url,path}  (Firestore 'cards' 컬렉션에 kind:'image'로 저장)
   let panX = 0, panY = 0, zoom = 1;
   let connectMode = false, connectFrom = null, ready = false;
 
@@ -683,12 +684,12 @@
   }
 
   // 카드 드래그: 손을 떼도 목표 위치까지 스르륵 따라간 뒤 저장
-  function makeDragger(cardId, el){
-    const c = cards.get(cardId);
+  function makeDragger(cardId, el, store = cards, overlap = true){
+    const c = store.get(cardId);
     let tx = c.x, ty = c.y, raf = 0, last = 0, down = true;
     const apply = ()=>{ el.style.left = c.x+'px'; el.style.top = c.y+'px'; updateLines(); };
     const finish = ()=>{
-      resolveOverlap(cardId);
+      if(overlap) resolveOverlap(cardId);
       updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
     };
     function step(now){
@@ -710,7 +711,7 @@
   /* ---------- 이동 / 확대축소 ---------- */
   let isPanning=false, panStartX=0, panStartY=0, panOrigX=0, panOrigY=0;
   viewport.addEventListener('mousedown', (e)=>{
-    if(e.target.closest('.card') || e.target.closest('.tag-card') || e.target.closest('#lines')) return;
+    if(e.target.closest('.card') || e.target.closest('.free-img') || e.target.closest('.tag-card') || e.target.closest('#lines')) return;
     if(connectMode){ clearConnectSelection(); return; }
     cancelGlide();
     window.getSelection()?.removeAllRanges();   // 배경 드래그 시 카드 글자가 파랗게 선택되는 것 방지
@@ -727,7 +728,7 @@
 
   let touchState = null;
   viewport.addEventListener('touchstart', (e)=>{
-    if(e.target.closest('.card') || e.target.closest('.tag-card')) return;
+    if(e.target.closest('.card') || e.target.closest('.free-img') || e.target.closest('.tag-card')) return;
     cancelGlide();
     if(e.touches.length===1){ touchState = {mode:'pan', x:e.touches[0].clientX, y:e.touches[0].clientY, ox:panX, oy:panY}; }
     else if(e.touches.length===2){
@@ -816,6 +817,102 @@
     return true;
   }
 
+  /* ---------- 배경에 그냥 올리는 이미지 (카드 없이 이미지 그대로) ---------- */
+  function renderImage(im){
+    let el = document.getElementById(im.id);
+    if(!el){
+      el = document.createElement('div');
+      el.className = 'free-img';
+      el.id = im.id;
+      el.innerHTML = `<img alt="" draggable="false"><button class="free-img-del" title="삭제">×</button><div class="free-img-resize" title="끌어서 크기 조절"></div>`;
+      world.appendChild(el);
+      wireImageEvents(el, im.id);
+    }
+    el.style.left = im.x+'px';
+    el.style.top = im.y+'px';
+    el.style.width = im.w+'px';
+    const img = el.querySelector('img');
+    if(img.getAttribute('src') !== im.url) img.src = im.url;
+  }
+
+  function wireImageEvents(el, id){
+    // 잡고 움직이기 / 오른쪽 아래 동그라미로 크기 조절
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.button > 0 || connectMode || e.target.closest('.free-img-del')) return;
+      const item = images.get(id); if(!item) return;
+      e.stopPropagation(); e.preventDefault();
+      const resizing = !!e.target.closest('.free-img-resize');
+      const sx = e.clientX, sy = e.clientY, ox = item.x, oy = item.y, ow = item.w;
+      const drag = resizing ? null : makeDragger(id, el, images, false);   // 이미지끼리는 겹쳐도 돼요
+      function onMove(ev){
+        const dx = (ev.clientX - sx)/zoom, dy = (ev.clientY - sy)/zoom;
+        if(resizing){
+          item.w = Math.min(2000, Math.max(40, ow + dx));
+          el.style.width = item.w+'px';
+        } else drag.to(ox + dx, oy + dy);
+      }
+      function onUp(){
+        window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);
+        if(resizing) updateDoc(doc(cardsCol, id), {w:item.w, updatedAt: serverTimestamp()}).catch(console.error);
+        else drag.end();
+      }
+      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
+    });
+
+    el.addEventListener('dblclick', (e)=>{
+      e.stopPropagation();
+      const item = images.get(id); if(item) openLightbox(item.url);
+    });
+
+    el.querySelector('.free-img-del').addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const ok = await showConfirm('이 이미지를 삭제할까요?');
+      if(!ok) return;
+      const item = images.get(id);
+      if(item && item.path) deleteObject(ref(storage, item.path)).catch(()=>{});
+      deleteDoc(doc(cardsCol, id)).catch(console.error);
+    });
+  }
+
+  async function addFreeImage(file, wx, wy){
+    const dims = await new Promise(resolve=>{
+      const u = URL.createObjectURL(file), i = new Image();
+      i.onload = ()=>{ resolve({w:i.naturalWidth, h:i.naturalHeight}); URL.revokeObjectURL(u); };
+      i.onerror = ()=>{ resolve(null); URL.revokeObjectURL(u); };
+      i.src = u;
+    });
+    if(!dims || !dims.w){ showToast('이 이미지는 열 수 없어요'); return; }
+    const w = Math.min(dims.w, 320);            // 처음 크기: 최대 가로 320 (나중에 모서리로 조절)
+    const h = w * dims.h / dims.w;
+    const id = uid();
+    const path = `media/${id}/${id}-${file.name || 'image'}`;
+    showToast('이미지 올리는 중…');
+    try{
+      const sref = ref(storage, path);
+      await uploadBytes(sref, file);
+      const url = await getDownloadURL(sref);
+      setDoc(doc(cardsCol, id), {kind:'image', x: wx - w/2, y: wy - h/2, w, url, path, createdAt: serverTimestamp(), updatedAt: serverTimestamp()}).catch(console.error);
+    }catch(err){
+      console.error(err);
+      showAlert('업로드에 실패했어요. Storage 설정과 규칙을 확인해주세요.');
+    }
+  }
+
+  // 파일을 배경 위에 끌어다 놓기 (카드 본문 위에 놓으면 기존처럼 카드 안에 들어가요)
+  viewport.addEventListener('dragover', (e)=>{
+    if(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files')) e.preventDefault();
+  });
+  viewport.addEventListener('drop', async (e)=>{
+    if(e.target.closest('.card-text')) return;
+    if(!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f=> f.type.startsWith('image/'));
+    if(!files.length){ showToast('이미지 파일만 올릴 수 있어요'); return; }
+    const rect = viewport.getBoundingClientRect();
+    const wx = (e.clientX - rect.left - panX)/zoom, wy = (e.clientY - rect.top - panY)/zoom;
+    for(let i=0; i<files.length; i++) await addFreeImage(files[i], wx + i*28, wy + i*28);
+  });
+
   /* ---------- 카드 추가 ---------- */
   function addCardAt(worldX, worldY){
     const id = uid();
@@ -828,7 +925,7 @@
     return c;
   }
   viewport.addEventListener('dblclick', (e)=>{
-    if(e.target.closest('.card') || e.target.closest('.tag-card') || e.target.closest('#lines') || connectMode) return;
+    if(e.target.closest('.card') || e.target.closest('.free-img') || e.target.closest('.tag-card') || e.target.closest('#lines') || connectMode) return;
     if(focusCard){ showToast('연결 보기 중이에요. Esc를 눌러 끄면 새 카드를 만들 수 있어요'); return; }
     const rect = viewport.getBoundingClientRect();
     addCardAt((e.clientX - rect.left - panX)/zoom, (e.clientY - rect.top - panY)/zoom);
@@ -867,10 +964,15 @@
       snap.docChanges().forEach(ch=>{
         const id = ch.doc.id;
         if(ch.type==='removed'){
-          cards.delete(id);
+          cards.delete(id); images.delete(id);
           const el = document.getElementById(id); if(el) el.remove();
         } else {
           const d = ch.doc.data();
+          if(d.kind === 'image'){      // 배경 이미지는 카드가 아니라 따로 관리
+            const im = {id, x:d.x||0, y:d.y||0, w:d.w||240, url:d.url||'', path:d.path||''};
+            images.set(id, im); renderImage(im);
+            return;
+          }
           const c = {id, x:d.x||0, y:d.y||0, date:d.date||'', html:d.html||'', source:d.source||'', page:d.page||'', quote:d.quote||'', important:!!d.important};
           cards.set(id, c); renderCard(c);
         }
