@@ -184,7 +184,7 @@ svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
 
 
 /* ========== 12. 우상단 메뉴 (검색창 + 연결하기 버튼) ========== */
-#topRight{ position:fixed; top:18px; right:20px; z-index:40; display:flex; flex-direction:column; gap:8px; align-items:stretch; }
+#topRight{ position:fixed; top:18px; right:20px; z-index:40; display:flex; flex-direction:row; gap:8px; align-items:center; }   /* 검색창 + 동그란 연결 버튼을 가로로 */
 
 #searchWrap{ position:static; }
 #searchInput{ display:block; background:rgba(30,29,27,0.85); border:1px solid rgba(255,255,255,0.12); color:#ece7db; padding:8px 13px; border-radius:999px; font-size:13px; width:180px; outline:none; font-family:'Inter',sans-serif; }
@@ -192,12 +192,13 @@ svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
 
 #toolbar{
   display:flex; align-items:center; justify-content:center;
+  width:36px; height:36px; flex:none;              /* ← 동그란 연결 버튼 크기 */
   background:rgba(30,29,27,0.88); backdrop-filter:blur(8px);
   border:1px solid rgba(255,255,255,0.08);
-  padding:2px; border-radius:999px;
+  padding:0; border-radius:50%;
   box-shadow:0 6px 20px rgba(0,0,0,0.3);
 }
-#toolbar .tbtn{ width:100%; justify-content:center; }
+#toolbar .tbtn{ width:100%; height:100%; padding:0; justify-content:center; border-radius:50%; font-size:15px; }
 .tbtn{ border:none; background:transparent; color:#ece7db; font-family:'Inter',sans-serif; font-size:13px; padding:6px 10px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
 .tbtn:hover{ background:rgba(255,255,255,0.09); }
 .tbtn.active{ background:var(--accent); color:#fff; }   /* 연결 모드 켜졌을 때 */
