@@ -257,3 +257,13 @@ svg#lines circle.tag-pin.is-dim{ opacity:0.3; }
   #searchInput{ width:120px; }
   .tbtn{ padding:8px 10px; font-size:12px; }
 }
+
+
+/* ========== 20. 배경에 그냥 올린 이미지 ========== */
+.free-img{ position:absolute; z-index:9; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; line-height:0; }
+.free-img:active{ cursor:grabbing; }
+.free-img img{ display:block; width:100%; height:auto; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.18); pointer-events:none; -webkit-user-drag:none; }
+.free-img-del{ position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(0,0,0,0.55); color:#fff; font-size:13px; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; }
+.free-img:hover .free-img-del{ display:flex; }
+.free-img-resize{ position:absolute; right:-7px; bottom:-7px; width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid var(--accent); cursor:nwse-resize; display:none; box-shadow:0 1px 4px rgba(0,0,0,0.25); }
+.free-img:hover .free-img-resize{ display:block; }
