@@ -146,6 +146,34 @@
     requestAnimationFrame(updateLines);
   }
 
+  /* ---------- 글 속의 주소(http://…)를 클릭 가능한 링크로 바꾸기 ---------- */
+  const URL_RE = /https?:\/\/[^\s<>"']+/g;
+  function linkifyNode(root){
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: n => (n.parentElement && n.parentElement.closest('a, .embed')) ? NodeFilter.FILTER_REJECT
+                     : /https?:\/\//.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    });
+    const nodes = []; while(walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(n=>{
+      const text = n.nodeValue, frag = document.createDocumentFragment();
+      let last = 0, m; URL_RE.lastIndex = 0;
+      while((m = URL_RE.exec(text))){
+        let url = m[0];
+        const trail = url.match(/[.,;:!?)\]}]+$/);          // 끝에 붙은 문장부호는 링크에서 제외
+        if(trail) url = url.slice(0, -trail[0].length);
+        if(!url) continue;
+        frag.append(text.slice(last, m.index));
+        const a = document.createElement('a');
+        a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        frag.append(a);
+        last = m.index + url.length; URL_RE.lastIndex = last;
+      }
+      frag.append(text.slice(last));
+      n.replaceWith(frag);
+    });
+  }
+  const escAttr = (s)=> s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
   function plainText(html){ const d=document.createElement('div'); d.innerHTML=html||''; return d.textContent||''; }
 
   /* 카드 HTML 안에 들어 있는 Storage 경로들 */
@@ -249,6 +277,7 @@
     const textDiv = el.querySelector('.card-text');
     if(document.activeElement !== textDiv && textDiv.innerHTML !== (card.html||'')){
       textDiv.innerHTML = card.html || '';
+      linkifyNode(textDiv);   // 예전에 적어둔 주소도 링크로 보이게
     }
   }
 
@@ -356,6 +385,7 @@
       band.style.background = has ? sourceColor(srcIn.value) : '';
       refreshSourceList(); applyHighlights();
     });
+    srcIn.addEventListener('change', ()=> snapToSourceCluster(cardId));   // 출처 입력을 마치면 같은 출처 카드 옆으로
     bindField(pageIn, 'page');
     bindField(quoteIn, 'quote', ()=>{ autoGrow(quoteIn); requestAnimationFrame(updateLines); });
 
@@ -417,10 +447,15 @@
       textDiv._t = setTimeout(()=> saveCardHtml(cardId, textDiv), 400);
       requestAnimationFrame(updateLines);
     });
-    textDiv.addEventListener('blur', ()=>{ clearTimeout(textDiv._t); saveCardHtml(cardId, textDiv); });
+    textDiv.addEventListener('blur', ()=>{ clearTimeout(textDiv._t); linkifyNode(textDiv); saveCardHtml(cardId, textDiv); });   // 카드를 벗어날 때 주소를 링크로 바꿔 저장
 
     /* 삽입된 미디어의 × 버튼 / 이미지 확대 (이벤트 위임) */
     textDiv.addEventListener('click', async (e)=>{
+      const link = e.target.closest('a');
+      if(link && (e.metaKey || e.ctrlKey)){            // Cmd(맥)/Ctrl + 클릭: 새 탭에서 열기
+        e.preventDefault(); window.open(link.href, '_blank', 'noopener');
+        return;
+      }
       const rm = e.target.closest('.embed-rm');
       if(rm){
         e.stopPropagation();
@@ -440,7 +475,15 @@
     textDiv.addEventListener('paste', async (e)=>{
       const items = Array.from(e.clipboardData?.items || []);
       const fileItem = items.find(it => it.kind==='file' && (it.type.startsWith('image/') || it.type.startsWith('video/')));
-      if(!fileItem) return;
+      if(!fileItem){
+        // 주소만 복사해 붙여넣으면 바로 링크로 넣기
+        const txt = (e.clipboardData?.getData('text/plain') || '').trim();
+        if(/^https?:\/\/\S+$/.test(txt)){
+          e.preventDefault();
+          document.execCommand('insertHTML', false, `<a href="${escAttr(txt)}" target="_blank" rel="noopener noreferrer">${escAttr(txt)}</a>&nbsp;`);
+        }
+        return;
+      }
       e.preventDefault();
       const file = fileItem.getAsFile();
       const sel = window.getSelection();
@@ -765,7 +808,7 @@
     } else if(touchState.mode==='pinch' && e.touches.length===2){
       const [t1,t2]=e.touches;
       const d = Math.hypot(t2.clientX-t1.clientX, t2.clientY-t1.clientY);
-      const newZoom = Math.min(2.5, Math.max(0.25, touchState.oz*(d/touchState.d)));
+      const newZoom = Math.min(2.5, Math.max(0.1, touchState.oz*(d/touchState.d)));
       const wx=(touchState.cx-touchState.ox)/touchState.oz, wy=(touchState.cy-touchState.oy)/touchState.oz;
       panX = touchState.cx - wx*newZoom; panY = touchState.cy - wy*newZoom; zoom = newZoom;
       applyTransform();
@@ -779,7 +822,7 @@
     const rect = viewport.getBoundingClientRect();
     const mx = e.clientX-rect.left, my = e.clientY-rect.top;
     const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
-    const newZoom = Math.min(2.5, Math.max(0.25, zoom*(1 + -e.deltaY*0.0016)));
+    const newZoom = Math.min(2.5, Math.max(0.1, zoom*(1 + -e.deltaY*0.0016)));
     panX = mx-worldX*newZoom; panY = my-worldY*newZoom; zoom = newZoom;
     applyTransform();
     clearTimeout(wheelSaveTimer); wheelSaveTimer = setTimeout(saveLocalView, 300);
@@ -790,7 +833,7 @@
     const rect = viewport.getBoundingClientRect();
     const mx = rect.width/2, my = rect.height/2;
     const worldX = (mx-panX)/zoom, worldY = (my-panY)/zoom;
-    zoom = Math.min(2.5, Math.max(0.25, zoom*factor));
+    zoom = Math.min(2.5, Math.max(0.1, zoom*factor));
     panX = mx-worldX*zoom; panY = my-worldY*zoom;
     applyTransform(); saveLocalView();
   }
@@ -836,6 +879,64 @@
     const t0 = performance.now();
     (function tick(){ updateLines(); if(performance.now()-t0 < 380) requestAnimationFrame(tick); })();
     return true;
+  }
+
+  /* ---------- 같은 출처끼리 모이기: 출처를 적으면 같은 출처 카드들 옆으로 스르륵 이동 ---------- */
+  function snapToSourceCluster(cardId){
+    const c = cards.get(cardId); if(!c) return;
+    const key = normSource(c.source); if(!key) return;
+    const me = rectOf(c);
+    const peers = [], others = [];
+    cards.forEach(o=>{
+      if(o.id === cardId) return;
+      const r = rectOf(o); others.push(r);
+      if(normSource(o.source) === key) peers.push(r);
+    });
+    if(!peers.length) return;                         // 같은 출처 카드가 아직 없으면 그대로 둠
+
+    // 이미 같은 출처 카드 가까이(120px 안)에 있으면 움직이지 않음
+    const gapTo = (a,b)=> Math.hypot(
+      Math.max(0, a.x-(b.x+b.w), b.x-(a.x+a.w)),
+      Math.max(0, a.y-(b.y+b.h), b.y-(a.y+a.h)));
+    if(peers.some(p=> gapTo(me,p) < 120)) return;
+
+    // 덩어리 중심, 그리고 각 카드의 아래/위/좌/우 빈자리 후보 (아래쪽 = 세로로 이어 쌓기를 우선)
+    const cx = peers.reduce((s,p)=> s+p.x+p.w/2, 0)/peers.length;
+    const cy = peers.reduce((s,p)=> s+p.y+p.h/2, 0)/peers.length;
+    const G = OVERLAP_GAP, cands = [];
+    peers.forEach(p=>{
+      cands.push({x:p.x,          y:p.y+p.h+G,   pen:0});
+      cands.push({x:p.x,          y:p.y-me.h-G,  pen:250});
+      cands.push({x:p.x+p.w+G,    y:p.y,         pen:250});
+      cands.push({x:p.x-me.w-G,   y:p.y,         pen:250});
+    });
+    let best = null, bestS = Infinity;
+    for(const k of cands){
+      if(others.some(o=> rectsHit({x:k.x, y:k.y, w:me.w, h:me.h}, o))) continue;
+      const s = Math.hypot(k.x+me.w/2-cx, k.y+me.h/2-cy) + k.pen;
+      if(s < bestS){ best = k; bestS = s; }
+    }
+    if(!best) return;
+
+    const el = document.getElementById(cardId);
+    c.x = best.x; c.y = best.y;
+    if(el){
+      el.classList.add('settling');
+      el.style.left = c.x+'px'; el.style.top = c.y+'px';
+      setTimeout(()=> el.classList.remove('settling'), 350);
+    }
+    const t0 = performance.now();
+    (function tick(){ updateLines(); if(performance.now()-t0 < 380) requestAnimationFrame(tick); })();
+    updateDoc(doc(cardsCol, cardId), {x:c.x, y:c.y, updatedAt: serverTimestamp()}).catch(console.error);
+    showToast(`"${c.source.trim()}" 카드들 옆으로 옮겼어요`);
+
+    // 새 자리가 화면 밖이면 화면을 그쪽으로 부드럽게 이동
+    const vp = viewport.getBoundingClientRect();
+    const sx = panX + c.x*zoom, sy = panY + c.y*zoom;
+    if(sx < 0 || sy < 0 || sx+me.w*zoom > vp.width || sy+me.h*zoom > vp.height){
+      cancelGlide();
+      glideTo(vp.width/2 - (c.x+me.w/2)*zoom, vp.height/2 - (c.y+me.h/2)*zoom);
+    }
   }
 
   /* ---------- 카드 추가 ---------- */
